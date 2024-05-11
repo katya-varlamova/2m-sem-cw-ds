@@ -10,10 +10,10 @@ public:
 
   API_CLIENT_INIT(TicketService)
 
-  API_CALL("GET", "/api/v1/tickets", TicketsGetPoint, HEADER(String, username, "X-User-Name"))
-  API_CALL("GET", "/api/v1/tickets/{uuid}", TicketGetPoint, PATH(String, uuid))
-  API_CALL("POST", "/api/v1/tickets", TicketPostPoint, BODY_DTO(Object<TicketRequestDto>, ticketDto), HEADER(String, username, "X-User-Name") )
-  API_CALL("PATCH", "/api/v1/tickets/{uuid}", TicketUpdatePoint, HEADER(String, username, "X-User-Name"), PATH(String, uuid))
+  API_CALL("GET", "/api/v1/tickets", TicketsGetPoint, HEADER(String, auth_token, "Authorization"))
+  API_CALL("GET", "/api/v1/tickets/{uuid}", TicketGetPoint, PATH(String, uuid), HEADER(String, auth_token, "Authorization"))
+  API_CALL("POST", "/api/v1/tickets", TicketPostPoint, BODY_DTO(Object<TicketRequestDto>, ticketDto), HEADER(String, auth_token, "Authorization") )
+  API_CALL("PATCH", "/api/v1/tickets/{uuid}", TicketUpdatePoint, HEADER(String, auth_token, "Authorization"), PATH(String, uuid))
 
 };
 

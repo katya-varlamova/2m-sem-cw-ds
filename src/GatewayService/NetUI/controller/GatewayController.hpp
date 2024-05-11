@@ -15,6 +15,7 @@
 #include "oatpp/parser/json/mapping/ObjectMapper.hpp"
 #include "oatpp/core/macro/codegen.hpp"
 #include "oatpp/core/macro/component.hpp"
+#include "JWTAuth.h"
 #include <iostream>
 
 #include OATPP_CODEGEN_BEGIN(ApiController) //<--- codegen begin
@@ -28,6 +29,7 @@ protected:
     {}
 
 public:
+    static std::shared_ptr<BaseConfig> config;
     static std::shared_ptr<BonusService> bonusService;
     static std::shared_ptr<FlightService> flightService;
     static std::shared_ptr<TicketService> ticketService;
@@ -36,6 +38,41 @@ public:
                                                                            objectMapper)) {
         return std::shared_ptr<GatewayController>(new GatewayController(objectMapper));
     }
+    ENDPOINT_ASYNC("POST", "/api/v1/authorize", AuthPoint ) {
+    ENDPOINT_ASYNC_INIT(AuthPoint)
+        Action act() override {
+            return request->readBodyToStringAsync().callbackTo(&AuthPoint::authorize);
+        }
+        Action authorize( const oatpp::String& str) {
+            oatpp::Object<AuthRequestDto> body;
+            try {
+                body = controller->getDefaultObjectMapper()->readFromString<oatpp::Object<AuthRequestDto>>(str);
+            } catch (const oatpp::parser::ParsingError& error){
+                auto dto = ValidationErrorResponse::createShared();
+                dto->message = "Invalid data";
+                oatpp::Vector<String> errors({});
+                errors->push_back("Invalid request body: " + error.getMessage());
+                dto->errors = errors;
+                auto resp = controller->createDtoResponse(Status::CODE_400, dto);
+                resp->putHeaderIfNotExists("Access-Control-Allow-Methods", "GET, POST, PUT, OPTIONS, DELETE");
+                resp->putHeaderIfNotExists("Access-Control-Allow-Origin", "*");
+                resp->putHeaderIfNotExists("Access-Control-Max-Age", "1728000");
+
+                return _return(resp);
+            }
+            auto dto = AuthResponseDto::createShared();
+            JWTAuth auth(config);
+            dto->access_token = auth.createToken(body->username, "user");
+            dto->role = "user";
+
+            auto resp = controller->createDtoResponse(Status::CODE_200, dto);
+            resp->putHeaderIfNotExists("Access-Control-Allow-Methods", "GET, POST, PUT, OPTIONS, DELETE");
+            resp->putHeaderIfNotExists("Access-Control-Allow-Origin", "*");
+            resp->putHeaderIfNotExists("Access-Control-Max-Age", "1728000");
+
+            return _return(resp);
+        }
+    };
 
     ENDPOINT_ASYNC("GET", "/api/v1/flights", FlightsGetPoint) {
     ENDPOINT_ASYNC_INIT(FlightsGetPoint)
@@ -49,7 +86,12 @@ public:
                 oatpp::Vector<String> errors({});
                 errors->push_back("Invalid request header: wrong page");
                 dto->errors = errors;
-                return _return(controller->createDtoResponse(Status::CODE_400, dto));
+                auto resp = controller->createDtoResponse(Status::CODE_400, dto);
+                resp->putHeaderIfNotExists("Access-Control-Allow-Methods", "GET, POST, PUT, OPTIONS, DELETE");
+                resp->putHeaderIfNotExists("Access-Control-Allow-Origin", "*");
+                resp->putHeaderIfNotExists("Access-Control-Max-Age", "1728000");
+
+                return _return(resp);
             }
 
             int pageSize = std::stoi(request->getQueryParameter("size"));
@@ -59,19 +101,78 @@ public:
                 oatpp::Vector<String> errors({});
                 errors->push_back("Invalid request header: wrong page size");
                 dto->errors = errors;
-                return _return(controller->createDtoResponse(Status::CODE_400, dto));
+                auto resp = controller->createDtoResponse(Status::CODE_400, dto);
+                resp->putHeaderIfNotExists("Access-Control-Allow-Methods", "GET, POST, PUT, OPTIONS, DELETE");
+                resp->putHeaderIfNotExists("Access-Control-Allow-Origin", "*");
+                resp->putHeaderIfNotExists("Access-Control-Max-Age", "1728000");
+
+                return _return(resp);
             }
 
             auto response = flightService->FlightsGetPoint(page, pageSize);
 
             if (response->getStatusCode() != 200)
             {
-                return _return(controller->createResponse(Status::CODE_500));
+                auto resp = controller->createResponse(Status::CODE_500);
+                resp->putHeaderIfNotExists("Access-Control-Allow-Methods", "GET, POST, PUT, OPTIONS, DELETE");
+                resp->putHeaderIfNotExists("Access-Control-Allow-Origin", "*");
+                resp->putHeaderIfNotExists("Access-Control-Max-Age", "1728000");
+
+                return _return(resp);
             }
 
             auto flights = response->readBodyToDto<oatpp::Object<FlightsResponseDto>>(
                     controller->getDefaultObjectMapper());
-            return _return(controller->createDtoResponse(Status::CODE_200, flights));
+            auto resp = controller->createDtoResponse(Status::CODE_200, flights);
+            resp->putHeaderIfNotExists("Access-Control-Allow-Methods", "GET, POST, PUT, OPTIONS, DELETE");
+            resp->putHeaderIfNotExists("Access-Control-Allow-Origin", "*");
+            resp->putHeaderIfNotExists("Access-Control-Max-Age", "1728000");
+
+            return _return(resp);
+        }
+
+    };
+
+ ENDPOINT_ASYNC("GET", "/api/v1/flights/{flight_number}", FlightGetPoint) {
+    ENDPOINT_ASYNC_INIT(FlightGetPoint)
+
+        Action act() override {
+
+            std::string flight_number = request->getPathVariable("flight_number");
+            if (flight_number.empty()){
+                auto dto = ValidationErrorResponse::createShared();
+                dto->message = "Invalid data";
+                oatpp::Vector<String> errors({});
+                errors->push_back("Invalid request header: no flight number provided");
+                dto->errors = errors;
+                auto resp = controller->createDtoResponse(Status::CODE_400, dto);
+                resp->putHeaderIfNotExists("Access-Control-Allow-Methods", "GET, POST, PUT, OPTIONS, DELETE");
+                resp->putHeaderIfNotExists("Access-Control-Allow-Origin", "*");
+                resp->putHeaderIfNotExists("Access-Control-Max-Age", "1728000");
+
+                return _return(resp);
+            }
+
+            auto response = flightService->FlightGetPoint(flight_number);
+
+            if (response->getStatusCode() != 200)
+            {
+                auto resp = controller->createResponse(Status::CODE_500);
+                resp->putHeaderIfNotExists("Access-Control-Allow-Methods", "GET, POST, PUT, OPTIONS, DELETE");
+                resp->putHeaderIfNotExists("Access-Control-Allow-Origin", "*");
+                resp->putHeaderIfNotExists("Access-Control-Max-Age", "1728000");
+
+                return _return(resp);
+            }
+
+            auto flight = response->readBodyToDto<oatpp::Object<FlightResponseDto>>(
+                    controller->getDefaultObjectMapper());
+            auto resp = controller->createDtoResponse(Status::CODE_200, flight);
+            resp->putHeaderIfNotExists("Access-Control-Allow-Methods", "GET, POST, PUT, OPTIONS, DELETE");
+            resp->putHeaderIfNotExists("Access-Control-Allow-Origin", "*");
+            resp->putHeaderIfNotExists("Access-Control-Max-Age", "1728000");
+
+            return _return(resp);
         }
 
     };
@@ -79,6 +180,36 @@ public:
     ENDPOINT_ASYNC("GET", "/api/v1/tickets/{ticketUid}", TicketGetPoint) {
     ENDPOINT_ASYNC_INIT(TicketGetPoint)
         Action act() override {
+           auto auth_token = request->getHeader("Authorization");
+            if (!auth_token) {
+                auto dto = ValidationErrorResponse::createShared();
+                dto->message = "Invalid data";
+                oatpp::Vector<String> errors({});
+                errors->push_back("Invalid request header: no auth token provided");
+                dto->errors = errors;
+                auto resp = controller->createDtoResponse(Status::CODE_401, dto);
+                resp->putHeaderIfNotExists("Access-Control-Allow-Methods", "GET, POST, PUT, OPTIONS, DELETE");
+                resp->putHeaderIfNotExists("Access-Control-Allow-Origin", "*");
+                resp->putHeaderIfNotExists("Access-Control-Max-Age", "1728000");
+
+                return _return(resp);
+            }
+            JWTAuth auth(config);
+            auto token = auth.extractToken(auth_token);
+            if (!auth.checkToken(token))  {
+                auto dto = ValidationErrorResponse::createShared();
+                dto->message = "Invalid data";
+                oatpp::Vector<String> errors({});
+                errors->push_back("Invalid request header: wrong tiken provided");
+                dto->errors = errors;
+                auto resp = controller->createDtoResponse(Status::CODE_401, dto);
+                resp->putHeaderIfNotExists("Access-Control-Allow-Methods", "GET, POST, PUT, OPTIONS, DELETE");
+                resp->putHeaderIfNotExists("Access-Control-Allow-Origin", "*");
+                resp->putHeaderIfNotExists("Access-Control-Max-Age", "1728000");
+
+                return _return(resp);
+            }
+            
             std::string uuid = request->getPathVariable("ticketUid");
             if (uuid.empty()){
                 auto dto = ValidationErrorResponse::createShared();
@@ -86,22 +217,43 @@ public:
                 oatpp::Vector<String> errors({});
                 errors->push_back("Invalid request header: no uuid provided");
                 dto->errors = errors;
-                return _return(controller->createDtoResponse(Status::CODE_400, dto));
+                auto resp = controller->createDtoResponse(Status::CODE_400, dto);
+                resp->putHeaderIfNotExists("Access-Control-Allow-Methods", "GET, POST, PUT, OPTIONS, DELETE");
+                resp->putHeaderIfNotExists("Access-Control-Allow-Origin", "*");
+                resp->putHeaderIfNotExists("Access-Control-Max-Age", "1728000");
+
+                return _return(resp);
             }
 
-            auto ticketResponse = ticketService->TicketGetPoint(uuid);
+            auto ticketResponse = ticketService->TicketGetPoint(uuid, auth_token);
             if (ticketResponse->getStatusCode() != 200)
             {
-                if (ticketResponse->getStatusCode() == 404)
-                    return _return(controller->createResponse(Status::CODE_404));
-                return _return(controller->createResponse(Status::CODE_500));
+                if (ticketResponse->getStatusCode() == 404) {
+                    auto resp = controller->createResponse(Status::CODE_404);
+                    resp->putHeaderIfNotExists("Access-Control-Allow-Methods", "GET, POST, PUT, OPTIONS, DELETE");
+                    resp->putHeaderIfNotExists("Access-Control-Allow-Origin", "*");
+                    resp->putHeaderIfNotExists("Access-Control-Max-Age", "1728000");
+
+                    return _return(resp);
+                }
+                auto resp = controller->createResponse(Status::CODE_500);
+                resp->putHeaderIfNotExists("Access-Control-Allow-Methods", "GET, POST, PUT, OPTIONS, DELETE");
+                resp->putHeaderIfNotExists("Access-Control-Allow-Origin", "*");
+                resp->putHeaderIfNotExists("Access-Control-Max-Age", "1728000");
+
+                return _return(resp);
             }
             auto ticket = ticketResponse->readBodyToDto<oatpp::Object<TicketResponseDto>>(controller->getDefaultObjectMapper());
 
             auto flightResponse = flightService->FlightGetPoint(ticket->flightNumber);
             if (flightResponse->getStatusCode() != 200)
             {
-                return _return(controller->createResponse(Status::CODE_500));
+                auto resp = controller->createResponse(Status::CODE_500);
+                resp->putHeaderIfNotExists("Access-Control-Allow-Methods", "GET, POST, PUT, OPTIONS, DELETE");
+                resp->putHeaderIfNotExists("Access-Control-Allow-Origin", "*");
+                resp->putHeaderIfNotExists("Access-Control-Max-Age", "1728000");
+
+                return _return(resp);
             }
             auto flight = flightResponse->readBodyToDto<oatpp::Object<FlightResponseDto>>(controller->getDefaultObjectMapper());
 
@@ -113,8 +265,12 @@ public:
             ticketDto->date = flight->date;
             ticketDto->fromAirport = flight->fromAirport;
             ticketDto->toAirport = flight->toAirport;
+            auto resp = controller->createDtoResponse(Status::CODE_200, ticketDto);
+            resp->putHeaderIfNotExists("Access-Control-Allow-Methods", "GET, POST, PUT, OPTIONS, DELETE");
+            resp->putHeaderIfNotExists("Access-Control-Allow-Origin", "*");
+            resp->putHeaderIfNotExists("Access-Control-Max-Age", "1728000");
 
-            return _return(controller->createDtoResponse(Status::CODE_200, ticketDto));
+            return _return(resp);
 
         }
 
@@ -123,18 +279,44 @@ public:
     ENDPOINT_ASYNC("GET", "/api/v1/tickets", TicketsGetPoint) {
     ENDPOINT_ASYNC_INIT(TicketsGetPoint)
         Action act() override {
-            auto un = request->getHeader("X-User-Name");
-            if (!un) {
+           auto auth_token = request->getHeader("Authorization");
+            if (!auth_token) {
                 auto dto = ValidationErrorResponse::createShared();
                 dto->message = "Invalid data";
                 oatpp::Vector<String> errors({});
-                errors->push_back("Invalid request header: no username provided");
+                errors->push_back("Invalid request header: no auth token provided");
                 dto->errors = errors;
-                return _return(controller->createDtoResponse(Status::CODE_400, dto));
+                auto resp = controller->createDtoResponse(Status::CODE_401, dto);
+                resp->putHeaderIfNotExists("Access-Control-Allow-Methods", "GET, POST, PUT, OPTIONS, DELETE");
+                resp->putHeaderIfNotExists("Access-Control-Allow-Origin", "*");
+                resp->putHeaderIfNotExists("Access-Control-Max-Age", "1728000");
+
+                return _return(resp);
             }
-            auto ticketsResponse = ticketService->TicketsGetPoint(un);
+            JWTAuth auth(config);
+            auto token = auth.extractToken(auth_token);
+            if (!auth.checkToken(token))  {
+                auto dto = ValidationErrorResponse::createShared();
+                dto->message = "Invalid data";
+                oatpp::Vector<String> errors({});
+                errors->push_back("Invalid request header: wrong tiken provided");
+                dto->errors = errors;
+                auto resp = controller->createDtoResponse(Status::CODE_401, dto);
+                resp->putHeaderIfNotExists("Access-Control-Allow-Methods", "GET, POST, PUT, OPTIONS, DELETE");
+                resp->putHeaderIfNotExists("Access-Control-Allow-Origin", "*");
+                resp->putHeaderIfNotExists("Access-Control-Max-Age", "1728000");
+
+                return _return(resp);
+            }
+
+            auto ticketsResponse = ticketService->TicketsGetPoint(auth_token);
             if (ticketsResponse->getStatusCode() != 200) {
-                return _return(controller->createResponse(Status::CODE_500));
+                auto resp = controller->createResponse(Status::CODE_500);
+                resp->putHeaderIfNotExists("Access-Control-Allow-Methods", "GET, POST, PUT, OPTIONS, DELETE");
+                resp->putHeaderIfNotExists("Access-Control-Allow-Origin", "*");
+                resp->putHeaderIfNotExists("Access-Control-Max-Age", "1728000");
+
+                return _return(resp);
             }
             auto tickets = ticketsResponse->readBodyToDto<oatpp::Vector<oatpp::Object<TicketResponseDto>>>(
                     controller->getDefaultObjectMapper());
@@ -142,7 +324,12 @@ public:
             for (const auto &t : *tickets) {
                 auto flightResponse = flightService->FlightGetPoint(t->flightNumber);
                 if (flightResponse->getStatusCode() != 200) {
-                    return _return(controller->createResponse(Status::CODE_500));
+                    auto resp = controller->createResponse(Status::CODE_500);
+                    resp->putHeaderIfNotExists("Access-Control-Allow-Methods", "GET, POST, PUT, OPTIONS, DELETE");
+                    resp->putHeaderIfNotExists("Access-Control-Allow-Origin", "*");
+                    resp->putHeaderIfNotExists("Access-Control-Max-Age", "1728000");
+
+                    return _return(resp);
                 }
                 auto flight = flightResponse->readBodyToDto<oatpp::Object<FlightResponseDto>>(
                         controller->getDefaultObjectMapper());
@@ -156,7 +343,13 @@ public:
                 ticketDto->toAirport = flight->toAirport;
                 dtoVector->push_back(ticketDto);
             }
-            return _return(controller->createDtoResponse(Status::CODE_200, dtoVector));
+
+            auto resp = controller->createDtoResponse(Status::CODE_200, dtoVector);
+            resp->putHeaderIfNotExists("Access-Control-Allow-Methods", "GET, POST, PUT, OPTIONS, DELETE");
+            resp->putHeaderIfNotExists("Access-Control-Allow-Origin", "*");
+            resp->putHeaderIfNotExists("Access-Control-Max-Age", "1728000");
+
+            return _return(resp);
         }
 
     };
@@ -165,23 +358,54 @@ public:
     ENDPOINT_ASYNC_INIT(PrivilegeGetPoint)
 
         Action act() override {
-            auto un = request->getHeader("X-User-Name");
-            if (!un) {
+           auto auth_token = request->getHeader("Authorization"); 
+            if (!auth_token) {
                 auto dto = ValidationErrorResponse::createShared();
                 dto->message = "Invalid data";
                 oatpp::Vector<String> errors({});
-                errors->push_back("Invalid request header: no username provided");
+                errors->push_back("Invalid request header: no auth token provided");
                 dto->errors = errors;
-                return _return(controller->createDtoResponse(Status::CODE_400, dto));
+                auto resp = controller->createDtoResponse(Status::CODE_401, dto);
+                resp->putHeaderIfNotExists("Access-Control-Allow-Methods", "GET, POST, PUT, OPTIONS, DELETE");
+                resp->putHeaderIfNotExists("Access-Control-Allow-Origin", "*");
+                resp->putHeaderIfNotExists("Access-Control-Max-Age", "1728000");
+
+                return _return(resp);
             }
-            auto bonusResponse = bonusService->BalanceGetPoint(un);
+            JWTAuth auth(config);
+            auto token = auth.extractToken(auth_token);
+            if (!auth.checkToken(token))  {
+                auto dto = ValidationErrorResponse::createShared();
+                dto->message = "Invalid data";
+                oatpp::Vector<String> errors({});
+                errors->push_back("Invalid request header: wrong tiken provided");
+                dto->errors = errors;
+                auto resp = controller->createDtoResponse(Status::CODE_401, dto);
+                resp->putHeaderIfNotExists("Access-Control-Allow-Methods", "GET, POST, PUT, OPTIONS, DELETE");
+                resp->putHeaderIfNotExists("Access-Control-Allow-Origin", "*");
+                resp->putHeaderIfNotExists("Access-Control-Max-Age", "1728000");
+
+                return _return(resp);
+            }
+
+            auto bonusResponse = bonusService->BalanceGetPoint(auth_token);
             if (bonusResponse->getStatusCode() != 200) {
-                return _return(controller->createResponse(Status::CODE_500));
+                auto resp = controller->createResponse(Status::CODE_500);
+                resp->putHeaderIfNotExists("Access-Control-Allow-Methods", "GET, POST, PUT, OPTIONS, DELETE");
+                resp->putHeaderIfNotExists("Access-Control-Allow-Origin", "*");
+                resp->putHeaderIfNotExists("Access-Control-Max-Age", "1728000");
+
+                return _return(resp);
             }
             auto bonus = bonusResponse->readBodyToDto<oatpp::Object<BalanceResponseDto>>(
                     controller->getDefaultObjectMapper());
 
-            return _return(controller->createDtoResponse(Status::CODE_200, bonus));
+            auto resp = controller->createDtoResponse(Status::CODE_200, bonus);
+            resp->putHeaderIfNotExists("Access-Control-Allow-Methods", "GET, POST, PUT, OPTIONS, DELETE");
+            resp->putHeaderIfNotExists("Access-Control-Allow-Origin", "*");
+            resp->putHeaderIfNotExists("Access-Control-Max-Age", "1728000");
+
+            return _return(resp);
         }
 
     };
@@ -190,33 +414,72 @@ public:
     ENDPOINT_ASYNC_INIT(MeGetPoint)
 
         Action act() override {
-            auto un = request->getHeader("X-User-Name");
-            if (!un) {
+            auto auth_token = request->getHeader("Authorization"); 
+            if (!auth_token) {
                 auto dto = ValidationErrorResponse::createShared();
                 dto->message = "Invalid data";
                 oatpp::Vector<String> errors({});
-                errors->push_back("Invalid request header: no username provided");
+                errors->push_back("Invalid request header: no auth token provided");
                 dto->errors = errors;
-                return _return(controller->createDtoResponse(Status::CODE_400, dto));
+                auto resp = controller->createDtoResponse(Status::CODE_401, dto);
+                resp->putHeaderIfNotExists("Access-Control-Allow-Methods", "GET, POST, PUT, OPTIONS, DELETE");
+                resp->putHeaderIfNotExists("Access-Control-Allow-Origin", "*");
+                resp->putHeaderIfNotExists("Access-Control-Max-Age", "1728000");
+
+                return _return(resp);
             }
-            auto bonusResponse = bonusService->BalanceGetPoint(un);
+            JWTAuth auth(config);
+            auto token = auth.extractToken(auth_token);
+            if (!auth.checkToken(token))  {
+                auto dto = ValidationErrorResponse::createShared();
+                dto->message = "Invalid data";
+                oatpp::Vector<String> errors({});
+                errors->push_back("Invalid request header: wrong tiken provided");
+                dto->errors = errors;
+                auto resp = controller->createDtoResponse(Status::CODE_401, dto);
+                resp->putHeaderIfNotExists("Access-Control-Allow-Methods", "GET, POST, PUT, OPTIONS, DELETE");
+                resp->putHeaderIfNotExists("Access-Control-Allow-Origin", "*");
+                resp->putHeaderIfNotExists("Access-Control-Max-Age", "1728000");
+
+                return _return(resp);
+            }
+            LoggerFactory::GetLogger()->LogWarning( "first check" );
+
+            auto bonusResponse = bonusService->BalanceGetPoint(auth_token);
             if (bonusResponse->getStatusCode() != 200) {
-                return _return(controller->createResponse(Status::CODE_500));
+                auto resp = controller->createResponse(Status::CODE_500);
+                resp->putHeaderIfNotExists("Access-Control-Allow-Methods", "GET, POST, PUT, OPTIONS, DELETE");
+                resp->putHeaderIfNotExists("Access-Control-Allow-Origin", "*");
+                resp->putHeaderIfNotExists("Access-Control-Max-Age", "1728000");
+
+                return _return(resp);
             }
+            LoggerFactory::GetLogger()->LogWarning( "bonus ok" );
             auto bonus = bonusResponse->readBodyToDto<oatpp::Object<BalanceResponseDto>>(
                     controller->getDefaultObjectMapper());
 
-            auto ticketsResponse = ticketService->TicketsGetPoint(un);
+            auto ticketsResponse = ticketService->TicketsGetPoint(auth_token);
             if (ticketsResponse->getStatusCode() != 200) {
-                return _return(controller->createResponse(Status::CODE_500));
+                auto resp = controller->createResponse(Status::CODE_500);
+                resp->putHeaderIfNotExists("Access-Control-Allow-Methods", "GET, POST, PUT, OPTIONS, DELETE");
+                resp->putHeaderIfNotExists("Access-Control-Allow-Origin", "*");
+                resp->putHeaderIfNotExists("Access-Control-Max-Age", "1728000");
+
+                return _return(resp);
             }
+            LoggerFactory::GetLogger()->LogWarning( "ticket ok" );
             auto tickets = ticketsResponse->readBodyToDto<oatpp::Vector<oatpp::Object<TicketResponseDto>>>(
                     controller->getDefaultObjectMapper());
             oatpp::Vector<oatpp::Object<FullTicketResponseDto>> dtoVector({});
             for (const auto &t : *tickets) {
                 auto flightResponse = flightService->FlightGetPoint(t->flightNumber);
                 if (flightResponse->getStatusCode() != 200) {
-                    return _return(controller->createResponse(Status::CODE_500));
+                    auto resp = controller->createResponse(Status::CODE_500);
+                    resp->putHeaderIfNotExists("Access-Control-Allow-Methods", "GET, POST, PUT, OPTIONS, DELETE");
+                    resp->putHeaderIfNotExists("Access-Control-Allow-Origin", "*");
+                    resp->putHeaderIfNotExists("Access-Control-Max-Age", "1728000");
+
+                    return _return(resp);
                 }
                 auto flight = flightResponse->readBodyToDto<oatpp::Object<FlightResponseDto>>(
                         controller->getDefaultObjectMapper());
@@ -238,7 +501,12 @@ public:
             auto meDto = UserInfoDto::createShared();
             meDto->privilege = balancePartDto;
             meDto->tickets = dtoVector;
-            return _return(controller->createDtoResponse(Status::CODE_200, meDto));
+            auto resp = controller->createDtoResponse(Status::CODE_200, meDto);
+            resp->putHeaderIfNotExists("Access-Control-Allow-Methods", "GET, POST, PUT, OPTIONS, DELETE");
+            resp->putHeaderIfNotExists("Access-Control-Allow-Origin", "*");
+            resp->putHeaderIfNotExists("Access-Control-Max-Age", "1728000");
+
+            return _return(resp);
         }
 
     };
@@ -259,23 +527,56 @@ public:
                 oatpp::Vector<String> errors({});
                 errors->push_back("Invalid request body: " + error.getMessage());
                 dto->errors = errors;
-                return _return(controller->createDtoResponse(Status::CODE_400, dto));
+                auto resp = controller->createDtoResponse(Status::CODE_400, dto);
+                resp->putHeaderIfNotExists("Access-Control-Allow-Methods", "GET, POST, PUT, OPTIONS, DELETE");
+                resp->putHeaderIfNotExists("Access-Control-Allow-Origin", "*");
+                resp->putHeaderIfNotExists("Access-Control-Max-Age", "1728000");
+
+                return _return(resp);
             }
-            auto un = request->getHeader("X-User-Name");
-            if (!un) {
+           auto auth_token = request->getHeader("Authorization"); 
+            if (!auth_token) {
                 auto dto = ValidationErrorResponse::createShared();
                 dto->message = "Invalid data";
                 oatpp::Vector<String> errors({});
-                errors->push_back("Invalid request header: no username provided");
+                errors->push_back("Invalid request header: no auth token provided");
                 dto->errors = errors;
-                return _return(controller->createDtoResponse(Status::CODE_400, dto));
+                auto resp = controller->createDtoResponse(Status::CODE_401, dto);
+                resp->putHeaderIfNotExists("Access-Control-Allow-Methods", "GET, POST, PUT, OPTIONS, DELETE");
+                resp->putHeaderIfNotExists("Access-Control-Allow-Origin", "*");
+                resp->putHeaderIfNotExists("Access-Control-Max-Age", "1728000");
+
+                return _return(resp);
             }
+            JWTAuth auth(config);
+            auto token = auth.extractToken(auth_token);
+            if (!auth.checkToken(token))  {
+                auto dto = ValidationErrorResponse::createShared();
+                dto->message = "Invalid data";
+                oatpp::Vector<String> errors({});
+                errors->push_back("Invalid request header: wrong tiken provided");
+                dto->errors = errors;
+                auto resp = controller->createDtoResponse(Status::CODE_401, dto);
+                resp->putHeaderIfNotExists("Access-Control-Allow-Methods", "GET, POST, PUT, OPTIONS, DELETE");
+                resp->putHeaderIfNotExists("Access-Control-Allow-Origin", "*");
+                resp->putHeaderIfNotExists("Access-Control-Max-Age", "1728000");
+
+                return _return(resp);
+            }
+
+            auto un = auth.getLogin(token);
+
             auto fbrDto = FullBuyResponseDto::createShared();
 
             auto flightResponse = flightService->FlightGetPoint(body->flightNumber);
             if (flightResponse->getStatusCode() != 200)
             {
-                return _return(controller->createResponse(Status::CODE_500));
+                auto resp = controller->createResponse(Status::CODE_500);
+                resp->putHeaderIfNotExists("Access-Control-Allow-Methods", "GET, POST, PUT, OPTIONS, DELETE");
+                resp->putHeaderIfNotExists("Access-Control-Allow-Origin", "*");
+                resp->putHeaderIfNotExists("Access-Control-Max-Age", "1728000");
+
+                return _return(resp);
             }
             auto flight = flightResponse->readBodyToDto<oatpp::Object<FlightResponseDto>>(controller->getDefaultObjectMapper());
 
@@ -283,9 +584,14 @@ public:
             auto ticketDto = TicketRequestDto::createShared();
             ticketDto->flightNumber = body->flightNumber;
             ticketDto->price = body->price;
-            auto ticketResp = ticketService->TicketPostPoint(ticketDto, un);
+            auto ticketResp = ticketService->TicketPostPoint(ticketDto, auth_token);
             if (ticketResp->getStatusCode() != 200) {
-                return _return(controller->createResponse(Status::CODE_500));
+                auto resp = controller->createResponse(Status::CODE_500);
+                resp->putHeaderIfNotExists("Access-Control-Allow-Methods", "GET, POST, PUT, OPTIONS, DELETE");
+                resp->putHeaderIfNotExists("Access-Control-Allow-Origin", "*");
+                resp->putHeaderIfNotExists("Access-Control-Max-Age", "1728000");
+
+                return _return(resp);
             }
             auto ticket = ticketResp->readBodyToDto<oatpp::Object<TicketResponseDto>>(
                     controller->getDefaultObjectMapper());
@@ -296,9 +602,14 @@ public:
             brDto->ticketUid = ticket->ticketUid;
             brDto->price = body->price;
             brDto->paidFromBalance = body->paidFromBalance;
-            auto bonusResp = bonusService->PurchasePoint(brDto);
+            auto bonusResp = bonusService->PurchasePoint(brDto, auth_token);
             if (bonusResp->getStatusCode() != 200) {
-                return _return(controller->createResponse(Status::CODE_500));
+                auto resp = controller->createResponse(Status::CODE_500);
+                resp->putHeaderIfNotExists("Access-Control-Allow-Methods", "GET, POST, PUT, OPTIONS, DELETE");
+                resp->putHeaderIfNotExists("Access-Control-Allow-Origin", "*");
+                resp->putHeaderIfNotExists("Access-Control-Max-Age", "1728000");
+
+                return _return(resp);
             }
             auto bonus = bonusResp->readBodyToDto<oatpp::Object<BuyResponseDto>>(
                     controller->getDefaultObjectMapper());
@@ -316,7 +627,13 @@ public:
             bs->status = bonus->status;
             bs->balance = bonus->balance;
             fbrDto->privilege = bs;
-            return _return(controller->createDtoResponse(Status::CODE_200, fbrDto));
+
+            auto resp = controller->createDtoResponse(Status::CODE_200, fbrDto);
+            resp->putHeaderIfNotExists("Access-Control-Allow-Methods", "GET, POST, PUT, OPTIONS, DELETE");
+            resp->putHeaderIfNotExists("Access-Control-Allow-Origin", "*");
+            resp->putHeaderIfNotExists("Access-Control-Max-Age", "1728000");
+
+            return _return(resp);
         }
 
     };
@@ -325,29 +642,81 @@ public:
     ENDPOINT_ASYNC_INIT(ReturnPoint)
 
         Action act() override {
-            std::string username = request->getHeader("X-User-Name") ? request->getHeader("X-User-Name") : "";
+           auto auth_token = request->getHeader("Authorization"); 
+            if (!auth_token) {
+                auto dto = ValidationErrorResponse::createShared();
+                dto->message = "Invalid data";
+                oatpp::Vector<String> errors({});
+                errors->push_back("Invalid request header: no auth token provided");
+                dto->errors = errors;
+                auto resp = controller->createDtoResponse(Status::CODE_401, dto);
+                resp->putHeaderIfNotExists("Access-Control-Allow-Methods", "GET, POST, PUT, OPTIONS, DELETE");
+                resp->putHeaderIfNotExists("Access-Control-Allow-Origin", "*");
+                resp->putHeaderIfNotExists("Access-Control-Max-Age", "1728000");
+
+                return _return(resp);
+            }
+            JWTAuth auth(config);
+            auto token = auth.extractToken(auth_token);
+            if (!auth.checkToken(token))  {
+                auto dto = ValidationErrorResponse::createShared();
+                dto->message = "Invalid data";
+                oatpp::Vector<String> errors({});
+                errors->push_back("Invalid request header: wrong tiken provided");
+                dto->errors = errors;
+                auto resp = controller->createDtoResponse(Status::CODE_401, dto);
+                resp->putHeaderIfNotExists("Access-Control-Allow-Methods", "GET, POST, PUT, OPTIONS, DELETE");
+                resp->putHeaderIfNotExists("Access-Control-Allow-Origin", "*");
+                resp->putHeaderIfNotExists("Access-Control-Max-Age", "1728000");
+
+                return _return(resp);
+            }
+
+            auto username = auth.getLogin(token);
+
+
             std::string ticket_uid = request->getPathVariable("ticketUid") ? request->getPathVariable("ticketUid") : "";
             if (username.empty() || ticket_uid.empty()){
                 auto dto = ErrorResponse::createShared();
                 dto->message = "Invalid username or ticketUID";
 
-                return _return(controller->createDtoResponse(Status::CODE_400, dto));
+                auto resp = controller->createDtoResponse(Status::CODE_400, dto);
+                resp->putHeaderIfNotExists("Access-Control-Allow-Methods", "GET, POST, PUT, OPTIONS, DELETE");
+                resp->putHeaderIfNotExists("Access-Control-Allow-Origin", "*");
+                resp->putHeaderIfNotExists("Access-Control-Max-Age", "1728000");
+
+                return _return(resp);
             }
 
-            auto ticketResp = ticketService->TicketUpdatePoint(username, ticket_uid);
+            auto ticketResp = ticketService->TicketUpdatePoint(auth_token, ticket_uid);
             if (ticketResp->getStatusCode() != 200) {
                 auto dto = ErrorResponse::createShared();
                 dto->message = "Not found!";
-                return _return(controller->createDtoResponse(Status::CODE_404, dto));
+                auto resp = controller->createDtoResponse(Status::CODE_404, dto);
+                resp->putHeaderIfNotExists("Access-Control-Allow-Methods", "GET, POST, PUT, OPTIONS, DELETE");
+                resp->putHeaderIfNotExists("Access-Control-Allow-Origin", "*");
+                resp->putHeaderIfNotExists("Access-Control-Max-Age", "1728000");
+
+                return _return(resp);
             }
 
-            auto bonusResp = bonusService->ReturnPoint(ticket_uid, username);
+            auto bonusResp = bonusService->ReturnPoint(ticket_uid, auth_token);
             if (bonusResp->getStatusCode() != 200) {
                 auto dto = ErrorResponse::createShared();
                 dto->message = "Not found!";
-                return _return(controller->createDtoResponse(Status::CODE_404, dto));
+                auto resp = controller->createDtoResponse(Status::CODE_404, dto);
+                resp->putHeaderIfNotExists("Access-Control-Allow-Methods", "GET, POST, PUT, OPTIONS, DELETE");
+                resp->putHeaderIfNotExists("Access-Control-Allow-Origin", "*");
+                resp->putHeaderIfNotExists("Access-Control-Max-Age", "1728000");
+
+                return _return(resp);
             }
-            return _return(controller->createResponse(Status::CODE_204));
+            auto resp = controller->createResponse(Status::CODE_204);
+            resp->putHeaderIfNotExists("Access-Control-Allow-Methods", "GET, POST, PUT, OPTIONS, DELETE");
+            resp->putHeaderIfNotExists("Access-Control-Allow-Origin", "*");
+            resp->putHeaderIfNotExists("Access-Control-Max-Age", "1728000");
+
+            return _return(resp);
         }
 
     };
@@ -355,7 +724,12 @@ public:
     ENDPOINT_ASYNC("GET", "/manage/health", HealthPoint ) {
     ENDPOINT_ASYNC_INIT(HealthPoint)
         Action act() override {
-            return _return(controller->createResponse(Status::CODE_200));
+            auto resp = controller->createResponse(Status::CODE_200);
+            resp->putHeaderIfNotExists("Access-Control-Allow-Methods", "GET, POST, PUT, OPTIONS, DELETE");
+            resp->putHeaderIfNotExists("Access-Control-Allow-Origin", "*");
+            resp->putHeaderIfNotExists("Access-Control-Max-Age", "1728000");
+
+            return _return(resp);
         };
     };
 };

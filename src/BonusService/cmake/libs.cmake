@@ -37,3 +37,4 @@ find_package(yaml-cpp REQUIRED)
 find_package(spdlog REQUIRED) # spdlog::spdlog
 find_package(jsoncpp REQUIRED)
 find_package(oatpp REQUIRED)
+find_package(jwt-cpp REQUIRED)

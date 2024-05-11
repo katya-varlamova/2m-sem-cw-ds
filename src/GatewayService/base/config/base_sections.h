@@ -4,7 +4,9 @@
 #include <string>
 
 const std::string LogFileSection = "LogFile";
-
+const std::string JwksSection = "jwks";
+const std::string PrivateKeysSection = "private_keys";
+const std::string CountKeysSection = "keys_count";
 const std::string ServerSection = "Server";
 const std::string PortSection = "Port";
 const std::string ClientsSection = "Clients";

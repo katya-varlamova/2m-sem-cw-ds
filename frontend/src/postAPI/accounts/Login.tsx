@@ -5,9 +5,9 @@ interface resp {
   status: number
 }
 
-export const Login = async function (data: AuthRequest): Promise<resp> {
+export const Login = async function (data: AuthRequest): Promise<resp> {  
   const response = await axiosBackend
-    .post(`/authorize`, data, { withCredentials: true })
+    .post(`/authorize`, data)
     .then((data) => data)
     .catch((error) => {
       return { status: error.response?.status, data: error.response.data };

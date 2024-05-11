@@ -11,6 +11,7 @@
 #include "oatpp/core/macro/component.hpp"
 #include "oatpp/core/utils/String.hpp"
 #include "IBLFacade.h"
+#include "oatpp/JWTAuth.h"
 #include OATPP_CODEGEN_BEGIN(ApiController)"oatpp/codegen/ApiController_define.hpp"
 
 
@@ -22,6 +23,7 @@ protected:
     {}
 public:
     static IBLFacadePtr facade;
+    static std::shared_ptr<BaseConfig> config;
     static std::shared_ptr<OatppServerController> createShared(OATPP_COMPONENT(std::shared_ptr<ObjectMapper>,
                                                                       objectMapper)){
         return std::shared_ptr<OatppServerController>(new OatppServerController(objectMapper));
@@ -32,15 +34,37 @@ public:
     ENDPOINT_ASYNC_INIT(TicketsGetPoint)
 
         Action act() override {
-            auto un = request->getHeader("X-User-Name");
-            if (!un){
+            auto auth_token = request->getHeader("Authorization");
+            if (!auth_token) {
                 auto dto = ValidationErrorResponse::createShared();
                 dto->message = "Invalid data";
                 oatpp::Vector<String> errors({});
-                errors->push_back("Invalid request header: no username provided");
+                errors->push_back("Invalid request header: no auth token provided");
                 dto->errors = errors;
-                return _return(controller->createDtoResponse(Status::CODE_400, dto));
+                auto resp = controller->createDtoResponse(Status::CODE_401, dto);
+                resp->putHeaderIfNotExists("Access-Control-Allow-Methods", "GET, POST, PUT, OPTIONS, DELETE");
+                resp->putHeaderIfNotExists("Access-Control-Allow-Origin", "*");
+                resp->putHeaderIfNotExists("Access-Control-Max-Age", "1728000");
+
+                return _return(resp);
             }
+            JWTAuth auth(config);
+            auto token = auth.extractToken(auth_token);
+            if (!auth.checkToken(token))  {
+                auto dto = ValidationErrorResponse::createShared();
+                dto->message = "Invalid data";
+                oatpp::Vector<String> errors({});
+                errors->push_back("Invalid request header: wrong tiken provided");
+                dto->errors = errors;
+                auto resp = controller->createDtoResponse(Status::CODE_401, dto);
+                resp->putHeaderIfNotExists("Access-Control-Allow-Methods", "GET, POST, PUT, OPTIONS, DELETE");
+                resp->putHeaderIfNotExists("Access-Control-Allow-Origin", "*");
+                resp->putHeaderIfNotExists("Access-Control-Max-Age", "1728000");
+
+                return _return(resp);
+            }
+
+            auto un = auth.getLogin(token);
 
             try {
                 auto tickets = facade->GetTicketsByUsername(un);
@@ -64,6 +88,36 @@ public:
 
     ENDPOINT_ASYNC_INIT(TicketGetPoint)
         Action act() override {
+            auto auth_token = request->getHeader("Authorization");
+            if (!auth_token) {
+                auto dto = ValidationErrorResponse::createShared();
+                dto->message = "Invalid data";
+                oatpp::Vector<String> errors({});
+                errors->push_back("Invalid request header: no auth token provided");
+                dto->errors = errors;
+                auto resp = controller->createDtoResponse(Status::CODE_401, dto);
+                resp->putHeaderIfNotExists("Access-Control-Allow-Methods", "GET, POST, PUT, OPTIONS, DELETE");
+                resp->putHeaderIfNotExists("Access-Control-Allow-Origin", "*");
+                resp->putHeaderIfNotExists("Access-Control-Max-Age", "1728000");
+
+                return _return(resp);
+            }
+            JWTAuth auth(config);
+            auto token = auth.extractToken(auth_token);
+            if (!auth.checkToken(token))  {
+                auto dto = ValidationErrorResponse::createShared();
+                dto->message = "Invalid data";
+                oatpp::Vector<String> errors({});
+                errors->push_back("Invalid request header: wrong tiken provided");
+                dto->errors = errors;
+                auto resp = controller->createDtoResponse(Status::CODE_401, dto);
+                resp->putHeaderIfNotExists("Access-Control-Allow-Methods", "GET, POST, PUT, OPTIONS, DELETE");
+                resp->putHeaderIfNotExists("Access-Control-Allow-Origin", "*");
+                resp->putHeaderIfNotExists("Access-Control-Max-Age", "1728000");
+
+                return _return(resp);
+            }
+
             std::string uuid = request->getPathVariable("uuid");
             if (uuid.empty()){
                 auto dto = ValidationErrorResponse::createShared();
@@ -107,15 +161,37 @@ public:
                 dto->errors = errors;
                 return _return(controller->createDtoResponse(Status::CODE_400, dto));
             }
-            auto un = request->getHeader("X-User-Name");
-            if (!un){
+            auto auth_token = request->getHeader("Authorization");
+            if (!auth_token) {
                 auto dto = ValidationErrorResponse::createShared();
                 dto->message = "Invalid data";
                 oatpp::Vector<String> errors({});
-                errors->push_back("Invalid request header: no username provided");
+                errors->push_back("Invalid request header: no auth token provided");
                 dto->errors = errors;
-                return _return(controller->createDtoResponse(Status::CODE_400, dto));
+                auto resp = controller->createDtoResponse(Status::CODE_401, dto);
+                resp->putHeaderIfNotExists("Access-Control-Allow-Methods", "GET, POST, PUT, OPTIONS, DELETE");
+                resp->putHeaderIfNotExists("Access-Control-Allow-Origin", "*");
+                resp->putHeaderIfNotExists("Access-Control-Max-Age", "1728000");
+
+                return _return(resp);
             }
+            JWTAuth auth(config);
+            auto token = auth.extractToken(auth_token);
+            if (!auth.checkToken(token))  {
+                auto dto = ValidationErrorResponse::createShared();
+                dto->message = "Invalid data";
+                oatpp::Vector<String> errors({});
+                errors->push_back("Invalid request header: wrong tiken provided");
+                dto->errors = errors;
+                auto resp = controller->createDtoResponse(Status::CODE_401, dto);
+                resp->putHeaderIfNotExists("Access-Control-Allow-Methods", "GET, POST, PUT, OPTIONS, DELETE");
+                resp->putHeaderIfNotExists("Access-Control-Allow-Origin", "*");
+                resp->putHeaderIfNotExists("Access-Control-Max-Age", "1728000");
+
+                return _return(resp);
+            }
+
+            auto un = auth.getLogin(token);
 
             Ticket ticket(-1,
                      "",
@@ -154,15 +230,38 @@ public:
                 dto->errors = errors;
                 return _return(controller->createDtoResponse(Status::CODE_400, dto));
             }
-            auto un = request->getHeader("X-User-Name");
-            if (!un){
+            auto auth_token = request->getHeader("Authorization");
+            if (!auth_token) {
                 auto dto = ValidationErrorResponse::createShared();
                 dto->message = "Invalid data";
                 oatpp::Vector<String> errors({});
-                errors->push_back("Invalid request header: no username provided");
+                errors->push_back("Invalid request header: no auth token provided");
                 dto->errors = errors;
-                return _return(controller->createDtoResponse(Status::CODE_400, dto));
+                auto resp = controller->createDtoResponse(Status::CODE_401, dto);
+                resp->putHeaderIfNotExists("Access-Control-Allow-Methods", "GET, POST, PUT, OPTIONS, DELETE");
+                resp->putHeaderIfNotExists("Access-Control-Allow-Origin", "*");
+                resp->putHeaderIfNotExists("Access-Control-Max-Age", "1728000");
+
+                return _return(resp);
             }
+            JWTAuth auth(config);
+            auto token = auth.extractToken(auth_token);
+            if (!auth.checkToken(token))  {
+                auto dto = ValidationErrorResponse::createShared();
+                dto->message = "Invalid data";
+                oatpp::Vector<String> errors({});
+                errors->push_back("Invalid request header: wrong tiken provided");
+                dto->errors = errors;
+                auto resp = controller->createDtoResponse(Status::CODE_401, dto);
+                resp->putHeaderIfNotExists("Access-Control-Allow-Methods", "GET, POST, PUT, OPTIONS, DELETE");
+                resp->putHeaderIfNotExists("Access-Control-Allow-Origin", "*");
+                resp->putHeaderIfNotExists("Access-Control-Max-Age", "1728000");
+
+                return _return(resp);
+            }
+
+            auto un = auth.getLogin(token);
+
             try {
                 facade->DeleteTicket(uuid, un);
                 return _return(controller->createResponse(Status::CODE_200));
