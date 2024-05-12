@@ -6,19 +6,21 @@ struct User
 {
     User() = default;
     User(
-      int id,
       const std::string& name,
-      const std::string& address,
-      const std::string& work,
-      const int& age
+      const std::string& login,
+      const std::string& email,
+      const std::string& mobilePhone,
+      const std::string& lastName,
+      const std::string& password,
+      const std::string& role
     );
-    int id;
-    std::string name, address, work;
-    int age;
+    std::string name, login, email;
+    std::string mobilePhone, lastName, password, role;
     bool operator==( const User& l ) const
     {
-        return l.id == this->id && l.name == this->name &&
-               l.age == this->age && l.address == this->address &&
-               l.work == this->work;
+        return l.name == this->name &&
+               l.mobilePhone == this->mobilePhone && l.login == this->login &&
+               l.email == this->email && l.password == this->password && l.lastName == this->lastName &&
+               l.role == this->role;
     }
 };

@@ -9,6 +9,7 @@
 #include "oatpp/core/macro/component.hpp"
 #include "oatpp/core/utils/String.hpp"
 #include "IBLFacade.h"
+#include "JWTAuth.h"
 #include OATPP_CODEGEN_BEGIN(ApiController)"oatpp/codegen/ApiController_define.hpp"
 
 
@@ -20,77 +21,120 @@ protected:
     {}
 public:
     static IBLFacadePtr facade;
+    static std::shared_ptr<BaseConfig> config;
     static std::shared_ptr<OatppServerController> createShared(OATPP_COMPONENT(std::shared_ptr<ObjectMapper>,
                                                                       objectMapper)){
         return std::shared_ptr<OatppServerController>(new OatppServerController(objectMapper));
     }
 
-    ENDPOINT_ASYNC("GET", "/api/v1/persons/{id}", PersonGetPoint ) {
-
-    ENDPOINT_ASYNC_INIT(PersonGetPoint)
-
+    ENDPOINT_ASYNC("POST", "/api/v1/authcode", AuthCodePoint ) {
+    ENDPOINT_ASYNC_INIT(AuthCodePoint)
         Action act() override {
-            int id;
+            return request->readBodyToStringAsync().callbackTo(&AuthCodePoint::AuthCodePointReturn);
+        }
+        Action AuthCodePointReturn( const oatpp::String& str) {
+            oatpp::Object<AuthCodeRequestDto> body;
             try {
-                id = std::stoi(request->getPathVariable("id")->c_str());
-            } catch (const std::invalid_argument& e) {
+                body = controller->getDefaultObjectMapper()->readFromString<oatpp::Object<AuthCodeRequestDto>>(str);
+            } catch (const oatpp::parser::ParsingError& error){
                 auto dto = ValidationErrorResponse::createShared();
                 dto->message = "Invalid data";
                 oatpp::Vector<String> errors({});
-                errors->push_back("Invalid ID: must be integer!");
+                errors->push_back("Invalid request body: " + error.getMessage());
                 dto->errors = errors;
-                return _return(controller->createDtoResponse(Status::CODE_400, dto));
+                auto resp = controller->createDtoResponse(Status::CODE_400, dto);
+                resp->putHeaderIfNotExists("Access-Control-Allow-Methods", "GET, POST, PUT, OPTIONS, DELETE");
+                resp->putHeaderIfNotExists("Access-Control-Allow-Origin", "*");
+                resp->putHeaderIfNotExists("Access-Control-Max-Age", "1728000");
+
+                return _return(resp);
             }
+            AuthCode code;
+            int res_code;
+            code.client_id = body->client_id;
+            code.scope_string = body->scope_string;
+            code.login = body->username;
             try {
-            auto u = facade->GetUserByID(id);
-                auto PersonDto = PersonResponseDto::createShared();
-                PersonDto->name = u.name;
-                PersonDto->work = u.work;
-                PersonDto->address = u.address;
-                PersonDto->age = u.age;
-                PersonDto->id = id;
-                return _return(controller->createDtoResponse(Status::CODE_200, PersonDto));
-            } catch (DatabaseException) {
+                res_code = facade->CreateAuthCode(code, body->password);
+            } catch (const DatabaseException &err) {
                 auto dto = ErrorResponse::createShared();
-                dto->message = "Not found with such ID!";
-                return _return(controller->createDtoResponse(Status::CODE_404, dto));
+                dto->message = "Internal server error: " + err.GetInfo();
+                auto resp = controller->createDtoResponse(Status::CODE_500, dto);
+                resp->putHeaderIfNotExists("Access-Control-Allow-Methods", "GET, POST, PUT, OPTIONS, DELETE");
+                resp->putHeaderIfNotExists("Access-Control-Allow-Origin", "*");
+                resp->putHeaderIfNotExists("Access-Control-Max-Age", "1728000");
+                return _return(resp);
             }
+            auto dto = AuthCodeResponseDto::createShared();
+            dto->auth_code = res_code;
+
+            auto resp = controller->createDtoResponse(Status::CODE_200, dto);
+            resp->putHeaderIfNotExists("Access-Control-Allow-Methods", "GET, POST, PUT, OPTIONS, DELETE");
+            resp->putHeaderIfNotExists("Access-Control-Allow-Origin", "*");
+            resp->putHeaderIfNotExists("Access-Control-Max-Age", "1728000");
+
+            return _return(resp);
         }
-
     };
-    ENDPOINT_ASYNC("GET", "/api/v1/persons", PersonsGetPoint ) {
-
-    ENDPOINT_ASYNC_INIT(PersonsGetPoint)
+    ENDPOINT_ASYNC("POST", "/api/v1/token", PointToken ) {
+    ENDPOINT_ASYNC_INIT(PointToken)
         Action act() override {
+            return request->readBodyToStringAsync().callbackTo(&PointToken::TokenPointReturn);
+        }
+        Action TokenPointReturn( const oatpp::String& str) {
+            oatpp::Object<TokenRequestDto> body;
             try {
-                auto users = facade->GetUsers();
-                oatpp::Vector<oatpp::Object<PersonResponseDto>> dtoVector({});
-                for (const auto & u : users) {
-                    auto PersonDto = PersonResponseDto::createShared();
-                    PersonDto->name = u.name;
-                    PersonDto->work = u.work;
-                    PersonDto->address = u.address;
-                    PersonDto->age = u.age;
-                    PersonDto->id = u.id;
-                    dtoVector->push_back(PersonDto);
-                }
-                return _return(controller->createDtoResponse(Status::CODE_200,  dtoVector));
-            } catch (DatabaseException) {
-                return _return(controller->createResponse(Status::CODE_500));
+                body = controller->getDefaultObjectMapper()->readFromString<oatpp::Object<TokenRequestDto>>(str);
+            } catch (const oatpp::parser::ParsingError& error){
+                auto dto = ValidationErrorResponse::createShared();
+                dto->message = "Invalid data";
+                oatpp::Vector<String> errors({});
+                errors->push_back("Invalid request body: " + error.getMessage());
+                dto->errors = errors;
+                auto resp = controller->createDtoResponse(Status::CODE_400, dto);
+                resp->putHeaderIfNotExists("Access-Control-Allow-Methods", "GET, POST, PUT, OPTIONS, DELETE");
+                resp->putHeaderIfNotExists("Access-Control-Allow-Origin", "*");
+                resp->putHeaderIfNotExists("Access-Control-Max-Age", "1728000");
+
+                return _return(resp);
             }
-        }
-
-    };
-    ENDPOINT_ASYNC("POST", "/api/v1/persons", PersonPostPoint ) {
-
-    ENDPOINT_ASYNC_INIT(PersonPostPoint)
-        Action act() override {
-            return request->readBodyToStringAsync().callbackTo(&PersonPostPoint::returnPersonResponse);
-        }
-        Action returnPersonResponse( const oatpp::String& str) {
-            oatpp::Object<PersonRequestDto> body;
+            std::string token;
+            std::string role;
+            int code = body->auth_code;
             try {
-                body = controller->getDefaultObjectMapper()->readFromString<oatpp::Object<PersonRequestDto>>(str);
+                token = facade->CreateToken(body->auth_code, body->client_secret, role);
+            } catch (const DatabaseException &err) {
+                auto dto = ErrorResponse::createShared();
+                dto->message = "Internal server error: " + err.GetInfo();
+                auto resp = controller->createDtoResponse(Status::CODE_500, dto);
+                resp->putHeaderIfNotExists("Access-Control-Allow-Methods", "GET, POST, PUT, OPTIONS, DELETE");
+                resp->putHeaderIfNotExists("Access-Control-Allow-Origin", "*");
+                resp->putHeaderIfNotExists("Access-Control-Max-Age", "1728000");
+                return _return(resp);
+            }
+            auto dto = TokenResponseDto::createShared();
+            dto->access_token = token;
+            dto->role = role;
+
+            auto resp = controller->createDtoResponse(Status::CODE_200, dto);
+            resp->putHeaderIfNotExists("Access-Control-Allow-Methods", "GET, POST, PUT, OPTIONS, DELETE");
+            resp->putHeaderIfNotExists("Access-Control-Allow-Origin", "*");
+            resp->putHeaderIfNotExists("Access-Control-Max-Age", "1728000");
+
+            return _return(resp);
+        }
+    };
+
+   ENDPOINT_ASYNC("POST", "/api/v1/clients", ClientPostPoint ) {
+
+    ENDPOINT_ASYNC_INIT(ClientPostPoint)
+        Action act() override {
+            return request->readBodyToStringAsync().callbackTo(&ClientPostPoint::returnResponse);
+        }
+        Action returnResponse( const oatpp::String& str) {
+            oatpp::Object<ClientRequestDto> body;
+            try {
+                body = controller->getDefaultObjectMapper()->readFromString<oatpp::Object<ClientRequestDto>>(str);
             } catch (const oatpp::parser::ParsingError& error){
                 auto dto = ValidationErrorResponse::createShared();
                 dto->message = "Invalid data";
@@ -99,28 +143,190 @@ public:
                 dto->errors = errors;
                 return _return(controller->createDtoResponse(Status::CODE_400, dto));
             }
-            User u(-1, body->name, body->address, body->work, body->age);
-            int id;
+            auto auth_token = request->getHeader("Authorization");
+            if (!auth_token) {
+                auto dto = ValidationErrorResponse::createShared();
+                dto->message = "Invalid data";
+                oatpp::Vector<String> errors({});
+                errors->push_back("Invalid request header: no auth token provided");
+                dto->errors = errors;
+                auto resp = controller->createDtoResponse(Status::CODE_401, dto);
+                resp->putHeaderIfNotExists("Access-Control-Allow-Methods", "GET, POST, PUT, OPTIONS, DELETE");
+                resp->putHeaderIfNotExists("Access-Control-Allow-Origin", "*");
+                resp->putHeaderIfNotExists("Access-Control-Max-Age", "1728000");
+
+                return _return(resp);
+            }
+            JWTAuth auth(config);
+            auto token = auth.extractToken(auth_token);
+            if (!auth.checkToken(token) || auth.getRole(token) != "admin")  {
+                auto dto = ValidationErrorResponse::createShared();
+                dto->message = "Invalid data";
+                oatpp::Vector<String> errors({});
+                errors->push_back("Invalid request header: wrong token provided");
+                dto->errors = errors;
+                auto resp = controller->createDtoResponse(Status::CODE_401, dto);
+                resp->putHeaderIfNotExists("Access-Control-Allow-Methods", "GET, POST, PUT, OPTIONS, DELETE");
+                resp->putHeaderIfNotExists("Access-Control-Allow-Origin", "*");
+                resp->putHeaderIfNotExists("Access-Control-Max-Age", "1728000");
+
+                return _return(resp);
+            }
+
+            Client c(body->client_id, body->client_secret);
             try {
-                id = facade->CreateUser(u);
+                facade->CreateClient(c);
             } catch (const DatabaseException &err) {
                 auto dto = ErrorResponse::createShared();
                 dto->message = "Internal server error: " + err.GetInfo();
-                return _return(controller->createDtoResponse(Status::CODE_500, dto));
+                auto resp = controller->createDtoResponse(Status::CODE_500, dto);
+                resp->putHeaderIfNotExists("Access-Control-Allow-Methods", "GET, POST, PUT, OPTIONS, DELETE");
+                resp->putHeaderIfNotExists("Access-Control-Allow-Origin", "*");
+                resp->putHeaderIfNotExists("Access-Control-Max-Age", "1728000");
+                return _return(resp);
             }
-            auto PersonDto = PersonResponseDto::createShared();
-            PersonDto->name = u.name;
-            PersonDto->work = u.work;
-            PersonDto->address = u.address;
-            PersonDto->age = u.age;
-            PersonDto->id = id;
-            auto response = controller->createResponse(Status::CODE_201);
-            response->putHeader("Location", "/api/v1/persons/" + std::to_string(id));
+            auto response = controller->createResponse(Status::CODE_200);
             return _return(response);
         }
 
     };
-    ENDPOINT_ASYNC("PATCH", "/api/v1/persons/{id}", PersonUpdatePoint ) {
+
+    ENDPOINT_ASYNC("POST", "/api/v1/register", PersonPostPoint ) {
+
+    ENDPOINT_ASYNC_INIT(PersonPostPoint)
+        Action act() override {
+            return request->readBodyToStringAsync().callbackTo(&PersonPostPoint::returnPersonResponse);
+        }
+        Action returnPersonResponse( const oatpp::String& str) {
+            oatpp::Object<PersonDto> body;
+            try {
+                body = controller->getDefaultObjectMapper()->readFromString<oatpp::Object<PersonDto>>(str);
+            } catch (const oatpp::parser::ParsingError& error){
+                auto dto = ValidationErrorResponse::createShared();
+                dto->message = "Invalid data";
+                oatpp::Vector<String> errors({});
+                errors->push_back("Invalid request body: " + error.getMessage());
+                dto->errors = errors;
+                return _return(controller->createDtoResponse(Status::CODE_400, dto));
+            }
+            if (body->role == "admin") {
+                auto auth_token = request->getHeader("Authorization");
+                if (!auth_token) {
+                    auto dto = ValidationErrorResponse::createShared();
+                    dto->message = "Invalid data";
+                    oatpp::Vector<String> errors({});
+                    errors->push_back("Invalid request header: no auth token provided");
+                    dto->errors = errors;
+                    auto resp = controller->createDtoResponse(Status::CODE_401, dto);
+                    resp->putHeaderIfNotExists("Access-Control-Allow-Methods", "GET, POST, PUT, OPTIONS, DELETE");
+                    resp->putHeaderIfNotExists("Access-Control-Allow-Origin", "*");
+                    resp->putHeaderIfNotExists("Access-Control-Max-Age", "1728000");
+
+                    return _return(resp);
+                }
+                JWTAuth auth(config);
+                auto token = auth.extractToken(auth_token);
+                if (!auth.checkToken(token) || auth.getRole(token) != "admin")  {
+                    auto dto = ValidationErrorResponse::createShared();
+                    dto->message = "Invalid data";
+                    oatpp::Vector<String> errors({});
+                    errors->push_back("Invalid request header: wrong tiken provided");
+                    dto->errors = errors;
+                    auto resp = controller->createDtoResponse(Status::CODE_401, dto);
+                    resp->putHeaderIfNotExists("Access-Control-Allow-Methods", "GET, POST, PUT, OPTIONS, DELETE");
+                    resp->putHeaderIfNotExists("Access-Control-Allow-Origin", "*");
+                    resp->putHeaderIfNotExists("Access-Control-Max-Age", "1728000");
+
+                    return _return(resp);
+                }
+            }
+            User u(body->firstName, body->login, body->email, body->mobilePhone, body->lastName, body->password, body->role);
+            try {
+                facade->CreateUser(u);
+            } catch (const DatabaseException &err) {
+                auto dto = ErrorResponse::createShared();
+                dto->message = "Internal server error: " + err.GetInfo();
+                auto resp = controller->createDtoResponse(Status::CODE_500, dto);
+                resp->putHeaderIfNotExists("Access-Control-Allow-Methods", "GET, POST, PUT, OPTIONS, DELETE");
+                resp->putHeaderIfNotExists("Access-Control-Allow-Origin", "*");
+                resp->putHeaderIfNotExists("Access-Control-Max-Age", "1728000");
+                return _return(resp);
+            }
+            auto response = controller->createResponse(Status::CODE_200);
+            response->putHeaderIfNotExists("Access-Control-Allow-Methods", "GET, POST, PUT, OPTIONS, DELETE");
+            response->putHeaderIfNotExists("Access-Control-Allow-Origin", "*");
+            response->putHeaderIfNotExists("Access-Control-Max-Age", "1728000");
+            return _return(response);
+        }
+
+    };
+
+
+    ENDPOINT_ASYNC("GET", "/api/v1/persons", PersonGetPoint ) {
+
+    ENDPOINT_ASYNC_INIT(PersonGetPoint)
+
+        Action act() override {
+            auto auth_token = request->getHeader("Authorization");
+            if (!auth_token) {
+                auto dto = ValidationErrorResponse::createShared();
+                dto->message = "Invalid data";
+                oatpp::Vector<String> errors({});
+                errors->push_back("Invalid request header: no auth token provided");
+                dto->errors = errors;
+                auto resp = controller->createDtoResponse(Status::CODE_401, dto);
+                resp->putHeaderIfNotExists("Access-Control-Allow-Methods", "GET, POST, PUT, OPTIONS, DELETE");
+                resp->putHeaderIfNotExists("Access-Control-Allow-Origin", "*");
+                resp->putHeaderIfNotExists("Access-Control-Max-Age", "1728000");
+
+                return _return(resp);
+            }
+            JWTAuth auth(config);
+            auto token = auth.extractToken(auth_token);
+            if (!auth.checkToken(token))  {
+                auto dto = ValidationErrorResponse::createShared();
+                dto->message = "Invalid data";
+                oatpp::Vector<String> errors({});
+                errors->push_back("Invalid request header: wrong tiken provided");
+                dto->errors = errors;
+                auto resp = controller->createDtoResponse(Status::CODE_401, dto);
+                resp->putHeaderIfNotExists("Access-Control-Allow-Methods", "GET, POST, PUT, OPTIONS, DELETE");
+                resp->putHeaderIfNotExists("Access-Control-Allow-Origin", "*");
+                resp->putHeaderIfNotExists("Access-Control-Max-Age", "1728000");
+
+                return _return(resp);
+            }
+
+            auto username = auth.getLogin(token);
+
+            try {
+            auto u = facade->GetUserByLogin(username);
+                auto personDto = PersonDto::createShared();
+                personDto->firstName = u.name;
+                personDto->email = u.email;
+                personDto->login = u.login;
+                personDto->mobilePhone = u.mobilePhone;
+                personDto->lastName = u.lastName;
+                personDto->role = u.role;
+                auto response = controller->createDtoResponse(Status::CODE_200, personDto);
+                response->putHeaderIfNotExists("Access-Control-Allow-Methods", "GET, POST, PUT, OPTIONS, DELETE");
+                response->putHeaderIfNotExists("Access-Control-Allow-Origin", "*");
+                response->putHeaderIfNotExists("Access-Control-Max-Age", "1728000");
+                return _return(response);
+            } catch (const DatabaseException &err) {
+                auto dto = ErrorResponse::createShared();
+                dto->message = "Internal server error: " + err.GetInfo();
+                auto resp = controller->createDtoResponse(Status::CODE_404, dto);
+                resp->putHeaderIfNotExists("Access-Control-Allow-Methods", "GET, POST, PUT, OPTIONS, DELETE");
+                resp->putHeaderIfNotExists("Access-Control-Allow-Origin", "*");
+                resp->putHeaderIfNotExists("Access-Control-Max-Age", "1728000");
+                return _return(resp);
+            }
+        }
+
+    };
+
+    ENDPOINT_ASYNC("PATCH", "/api/v1/persons", PersonUpdatePoint ) {
 
     ENDPOINT_ASYNC_INIT(PersonUpdatePoint)
 
@@ -128,9 +334,9 @@ public:
             return request->readBodyToStringAsync().callbackTo(&PersonUpdatePoint::returnPersonResponse);
         }
         Action returnPersonResponse( const oatpp::String& str) {
-            oatpp::Object<PersonRequestDto> body;
+            oatpp::Object<PersonDto> body;
             try {
-                body = controller->getDefaultObjectMapper()->readFromString<oatpp::Object<PersonRequestDto>>(str);
+                body = controller->getDefaultObjectMapper()->readFromString<oatpp::Object<PersonDto>>(str);
             } catch (const oatpp::parser::ParsingError& error){
                 auto dto = ValidationErrorResponse::createShared();
                 dto->message = "Invalid data";
@@ -139,78 +345,138 @@ public:
                 dto->errors = errors;
                 return _return(controller->createDtoResponse(Status::CODE_400, dto));
             }
-            int id;
-            try {
-                id = std::stoi(request->getPathVariable("id")->c_str());
-            } catch (const std::invalid_argument& e) {
+
+            auto auth_token = request->getHeader("Authorization");
+            if (!auth_token) {
                 auto dto = ValidationErrorResponse::createShared();
                 dto->message = "Invalid data";
                 oatpp::Vector<String> errors({});
-                errors->push_back("Invalid ID: must be integer!");
+                errors->push_back("Invalid request header: no auth token provided");
                 dto->errors = errors;
-                return _return(controller->createDtoResponse(Status::CODE_400, dto));
+                auto resp = controller->createDtoResponse(Status::CODE_401, dto);
+                resp->putHeaderIfNotExists("Access-Control-Allow-Methods", "GET, POST, PUT, OPTIONS, DELETE");
+                resp->putHeaderIfNotExists("Access-Control-Allow-Origin", "*");
+                resp->putHeaderIfNotExists("Access-Control-Max-Age", "1728000");
+
+                return _return(resp);
             }
+            JWTAuth auth(config);
+            auto token = auth.extractToken(auth_token);
+            if (!auth.checkToken(token))  {
+                auto dto = ValidationErrorResponse::createShared();
+                dto->message = "Invalid data";
+                oatpp::Vector<String> errors({});
+                errors->push_back("Invalid request header: wrong tiken provided");
+                dto->errors = errors;
+                auto resp = controller->createDtoResponse(Status::CODE_401, dto);
+                resp->putHeaderIfNotExists("Access-Control-Allow-Methods", "GET, POST, PUT, OPTIONS, DELETE");
+                resp->putHeaderIfNotExists("Access-Control-Allow-Origin", "*");
+                resp->putHeaderIfNotExists("Access-Control-Max-Age", "1728000");
+
+                return _return(resp);
+            }
+       
+            auto username = auth.getLogin(token);
             User u_old;
             try {
-                u_old = facade->GetUserByID(id);
-            } catch (const DatabaseException &err) {
-                auto dto = ErrorResponse::createShared();
-                dto->message = "Not found with such ID!";
-                return _return(controller->createDtoResponse(Status::CODE_404, dto));
-            }
-
-            User u(id,
-                   body->name ? *body->name : u_old.name,
-                   body->address ? *body->address : u_old.address,
-                   body->work ? *body->work : u_old.work,
-                   body->age != nullptr ? *body->age : u_old.age);
-            try {
-                facade->UpdateUserByID(id, u);
+                u_old = facade->GetUserByLogin(username);
             } catch (const DatabaseException &err) {
                 auto dto = ErrorResponse::createShared();
                 dto->message = "Internal server error: " + err.GetInfo();
-                return _return(controller->createDtoResponse(Status::CODE_500, dto));
+                auto resp = controller->createDtoResponse(Status::CODE_404, dto);
+                resp->putHeaderIfNotExists("Access-Control-Allow-Methods", "GET, POST, PUT, OPTIONS, DELETE");
+                resp->putHeaderIfNotExists("Access-Control-Allow-Origin", "*");
+                resp->putHeaderIfNotExists("Access-Control-Max-Age", "1728000");
+                return _return(resp);
             }
-            auto PersonDto = PersonResponseDto::createShared();
-            PersonDto->name = u.name;
-            PersonDto->work = u.work;
-            PersonDto->address = u.address;
-            PersonDto->age = u.age;
-            PersonDto->id = id;
-            return _return(controller->createDtoResponse(Status::CODE_200, PersonDto));
+
+            User u(body->firstName ? *body->firstName : u_old.name,
+                   body->login ? *body->login : u_old.login,
+                   body->email ? *body->email : u_old.email,
+                   body->mobilePhone ? *body->mobilePhone : u_old.mobilePhone,
+                   body->lastName ? *body->lastName : u_old.lastName,
+                   body->password ? *body->password : u_old.password,
+                   body->role ? *body->role : u_old.role); 
+            try {
+                facade->UpdateUserByLogin(username, u);
+            } catch (const DatabaseException &err) {
+                auto dto = ErrorResponse::createShared();
+                dto->message = "Internal server error: " + err.GetInfo();
+                auto resp = controller->createDtoResponse(Status::CODE_500, dto);
+                resp->putHeaderIfNotExists("Access-Control-Allow-Methods", "GET, POST, PUT, OPTIONS, DELETE");
+                resp->putHeaderIfNotExists("Access-Control-Allow-Origin", "*");
+                resp->putHeaderIfNotExists("Access-Control-Max-Age", "1728000");
+                return _return(resp);
+            }
+            auto personDto = PersonDto::createShared();
+            personDto->firstName = u.name;
+            personDto->email = u.email;
+            personDto->login = u.login;
+            personDto->mobilePhone = u.mobilePhone;
+            personDto->lastName = u.lastName;
+            personDto->role = u.role;
+            return _return(controller->createDtoResponse(Status::CODE_200, personDto));
         }
 
     };
-    ENDPOINT_ASYNC("DELETE", "/api/v1/persons/{id}", PersonDeletePoint ) {
+    ENDPOINT_ASYNC("DELETE", "/api/v1/persons", PersonDeletePoint ) {
     ENDPOINT_ASYNC_INIT(PersonDeletePoint)
 
         Action act() override {
-            int id;
-            try {
-                id = std::stoi(request->getPathVariable("id")->c_str());
-            } catch (const std::invalid_argument& e) {
+            auto auth_token = request->getHeader("Authorization");
+            if (!auth_token) {
                 auto dto = ValidationErrorResponse::createShared();
                 dto->message = "Invalid data";
                 oatpp::Vector<String> errors({});
-                errors->push_back("Invalid ID: must be integer!");
+                errors->push_back("Invalid request header: no auth token provided");
                 dto->errors = errors;
-                return _return(controller->createDtoResponse(Status::CODE_400, dto));
+                auto resp = controller->createDtoResponse(Status::CODE_401, dto);
+                resp->putHeaderIfNotExists("Access-Control-Allow-Methods", "GET, POST, PUT, OPTIONS, DELETE");
+                resp->putHeaderIfNotExists("Access-Control-Allow-Origin", "*");
+                resp->putHeaderIfNotExists("Access-Control-Max-Age", "1728000");
+
+                return _return(resp);
+            }
+            JWTAuth auth(config);
+            auto token = auth.extractToken(auth_token);
+            if (!auth.checkToken(token))  {
+                auto dto = ValidationErrorResponse::createShared();
+                dto->message = "Invalid data";
+                oatpp::Vector<String> errors({});
+                errors->push_back("Invalid request header: wrong tiken provided");
+                dto->errors = errors;
+                auto resp = controller->createDtoResponse(Status::CODE_401, dto);
+                resp->putHeaderIfNotExists("Access-Control-Allow-Methods", "GET, POST, PUT, OPTIONS, DELETE");
+                resp->putHeaderIfNotExists("Access-Control-Allow-Origin", "*");
+                resp->putHeaderIfNotExists("Access-Control-Max-Age", "1728000");
+
+                return _return(resp);
             }
 
+            auto username = auth.getLogin(token);
+
             try {
-                facade->GetUserByID(id);
+                facade->GetUserByLogin(username);
             } catch (const DatabaseException &err) {
                 auto dto = ErrorResponse::createShared();
                 dto->message = "Not found with such ID!";
-                return _return(controller->createDtoResponse(Status::CODE_404, dto));
+                auto resp = controller->createDtoResponse(Status::CODE_404, dto);
+                resp->putHeaderIfNotExists("Access-Control-Allow-Methods", "GET, POST, PUT, OPTIONS, DELETE");
+                resp->putHeaderIfNotExists("Access-Control-Allow-Origin", "*");
+                resp->putHeaderIfNotExists("Access-Control-Max-Age", "1728000");
+                return _return(resp);
             }
 
             try {
-                facade->DeleteUserByID(id);
+                facade->DeleteUserByLogin(username);
             } catch (const DatabaseException &err) {
                 auto dto = ErrorResponse::createShared();
                 dto->message = "Internal server error: " + err.GetInfo();
-                return _return(controller->createDtoResponse(Status::CODE_500, dto));
+                auto resp = controller->createDtoResponse(Status::CODE_500, dto);
+                resp->putHeaderIfNotExists("Access-Control-Allow-Methods", "GET, POST, PUT, OPTIONS, DELETE");
+                resp->putHeaderIfNotExists("Access-Control-Allow-Origin", "*");
+                resp->putHeaderIfNotExists("Access-Control-Max-Age", "1728000");
+                return _return(resp);
             }
 
             return _return(controller->createResponse(Status::CODE_204));

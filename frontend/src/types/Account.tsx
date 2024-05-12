@@ -8,18 +8,22 @@ export interface AuthRequest {
     username: string,
 	password: string,
 }
+export interface CallbackRequest {
+    auth_code: number,
+}
+export interface AuthRequestAdded {
+    username: string,
+	password: string,
+    client_id : number,
+    scope_string : string,
+}
 
 export interface NewUserRequest {
-    profile: {
-        firstName: string,
-        lastName: string,
-        email: string,
-        login: string,
-        mobilePhone: string,
-    },
-    credentials: {
-        password: {
-            value: string
-        }
-    },
+    firstName: string,
+    lastName: string,
+    email: string,
+    login: string,
+    mobilePhone: string,
+    password: string,
+    role: string
 }

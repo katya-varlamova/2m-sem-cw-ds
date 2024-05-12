@@ -7,12 +7,14 @@ void OatppServer::run() {
             {"0.0.0.0", 8080},
             {"flight-service", 8060},
             {"ticket-service", 8070},
-            {"bonus-service", 8050}
+            {"bonus-service", 8050},
+            {"identity-provider-service", 8090}
     );
 
     GatewayController::bonusService = components.bonusService.getObject();
     GatewayController::flightService = components.flightService.getObject();
     GatewayController::ticketService = components.ticketService.getObject();
+    GatewayController::identityProviderService = components.identityProviderService.getObject();
 
     auto router = components.httpRouter.getObject();
 

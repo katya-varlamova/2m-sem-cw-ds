@@ -1,5 +1,4 @@
 set (NEED_TESTS TRUE)
-add_subdirectory( DAUnits )
 
 set( PROJECT_NAME DA )
 project( ${PROJECT_NAME} CXX )
@@ -23,4 +22,6 @@ target_sources( ${PROJECT_NAME}
         Repositories/IUserRepository.h
         Repositories/PGUserRepository.cpp
         Repositories/PGUserRepository.h
+        Repositories/PGAuthCodeRepository.cpp
+        Repositories/PGClientRepository.cpp
         )

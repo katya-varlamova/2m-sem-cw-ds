@@ -50,6 +50,18 @@ services:
     depends_on:
       - postgres
 
+  identity-provider-service:
+    image: identity-provider-service
+    container_name: identity-provider-service
+    restart: on-failure
+    build:
+      context: src
+      dockerfile: IdentityProviderService/Dockerfile
+    ports:
+      - "8090:8090"
+    depends_on:
+      - postgres
+
   api-gateway:
     image: api-gateway
     container_name: api-gateway
@@ -63,6 +75,7 @@ services:
       - ticket-service
       - bonus-service
       - flight-service
+      - identity-provider-service
 
 volumes:
   db-data:

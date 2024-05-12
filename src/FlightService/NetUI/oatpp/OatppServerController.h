@@ -71,7 +71,7 @@ public:
                 }
                 flightsDto->items = dtoVector;
                 return _return(controller->createDtoResponse(Status::CODE_200, flightsDto));
-            } catch (DatabaseException) {
+            } catch (const DatabaseException &err) {
                 return _return(controller->createResponse(Status::CODE_500));
             }
         }
@@ -102,7 +102,7 @@ public:
                 auto response = controller->createDtoResponse(Status::CODE_200, flightDto);
 
                 return _return(response);
-            } catch (DatabaseException) {
+            } catch (const DatabaseException &err) {
                 return _return(controller->createResponse(Status::CODE_500));
             }
         }

@@ -5,11 +5,12 @@
 #include "dto/FlightDtos.hpp"
 #include <dto/TicketDtos.hpp>
 #include <dto/GatewayDtos.h>
+#include <dto/IdentityProviderDtos.hpp>
 
 #include "service/BonusService.hpp"
 #include "service/FlightService.hpp"
 #include "service/TicketService.hpp"
-
+#include "service/IdentityProviderService.hpp"
 #include "oatpp/web/server/api/ApiController.hpp"
 
 #include "oatpp/parser/json/mapping/ObjectMapper.hpp"
@@ -33,6 +34,7 @@ public:
     static std::shared_ptr<BonusService> bonusService;
     static std::shared_ptr<FlightService> flightService;
     static std::shared_ptr<TicketService> ticketService;
+    static std::shared_ptr<IdentityProviderService> identityProviderService;
 
     static std::shared_ptr<GatewayController> createShared(OATPP_COMPONENT(std::shared_ptr<ObjectMapper>,
                                                                            objectMapper)) {
@@ -41,12 +43,29 @@ public:
     ENDPOINT_ASYNC("POST", "/api/v1/authorize", AuthPoint ) {
     ENDPOINT_ASYNC_INIT(AuthPoint)
         Action act() override {
-            return request->readBodyToStringAsync().callbackTo(&AuthPoint::authorize);
+            auto dto = AuthResponseDto::createShared();
+            dto->client_id = config->GetIntField( { ClientIDSection });
+            dto->auth_url = std::string(config->GetStringField( { AuthURLSection }));
+            dto->scope_string = std::string(config->GetStringField( { ScopeStringSection }));
+            
+            auto resp = controller->createDtoResponse(Status::CODE_200, dto);
+            resp->putHeaderIfNotExists("Access-Control-Allow-Methods", "GET, POST, PUT, OPTIONS, DELETE");
+            resp->putHeaderIfNotExists("Access-Control-Allow-Origin", "*");
+            resp->putHeaderIfNotExists("Access-Control-Max-Age", "1728000");
+
+            return _return(resp);
         }
-        Action authorize( const oatpp::String& str) {
-            oatpp::Object<AuthRequestDto> body;
+    };
+
+    ENDPOINT_ASYNC("POST", "/api/v1/callback", CallbackPoint ) {
+    ENDPOINT_ASYNC_INIT(CallbackPoint)
+        Action act() override {
+            return request->readBodyToStringAsync().callbackTo(&CallbackPoint::Response);
+        }
+        Action Response( const oatpp::String& str) {
+            oatpp::Object<CallbackRequestDto> body;
             try {
-                body = controller->getDefaultObjectMapper()->readFromString<oatpp::Object<AuthRequestDto>>(str);
+                body = controller->getDefaultObjectMapper()->readFromString<oatpp::Object<CallbackRequestDto>>(str);
             } catch (const oatpp::parser::ParsingError& error){
                 auto dto = ValidationErrorResponse::createShared();
                 dto->message = "Invalid data";
@@ -60,12 +79,31 @@ public:
 
                 return _return(resp);
             }
-            auto dto = AuthResponseDto::createShared();
-            JWTAuth auth(config);
-            dto->access_token = auth.createToken(body->username, "user");
-            dto->role = "user";
 
-            auto resp = controller->createDtoResponse(Status::CODE_200, dto);
+            auto dto = TokenRequestDto::createShared();
+
+            dto->client_secret = std::string(config->GetStringField( { ClientSecretSection }));
+            dto->auth_code = body->auth_code;
+            
+            LoggerFactory::GetLogger()->LogWarning(std::string(dto->client_secret).c_str());
+            LoggerFactory::GetLogger()->LogWarning(std::to_string(dto->auth_code).c_str());
+
+            auto response = identityProviderService->TokenGetPoint(dto);
+
+            if (response->getStatusCode() != 200)
+            {
+                auto resp = controller->createResponse(Status::CODE_500);
+                resp->putHeaderIfNotExists("Access-Control-Allow-Methods", "GET, POST, PUT, OPTIONS, DELETE");
+                resp->putHeaderIfNotExists("Access-Control-Allow-Origin", "*");
+                resp->putHeaderIfNotExists("Access-Control-Max-Age", "1728000");
+
+                return _return(resp);
+            }
+
+             LoggerFactory::GetLogger()->LogWarning("here");
+            auto tokenResp = response->readBodyToDto<oatpp::Object<TokenResponseDto>>(
+                    controller->getDefaultObjectMapper());
+            auto resp = controller->createDtoResponse(Status::CODE_200, tokenResp);
             resp->putHeaderIfNotExists("Access-Control-Allow-Methods", "GET, POST, PUT, OPTIONS, DELETE");
             resp->putHeaderIfNotExists("Access-Control-Allow-Origin", "*");
             resp->putHeaderIfNotExists("Access-Control-Max-Age", "1728000");

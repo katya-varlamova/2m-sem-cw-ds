@@ -4,17 +4,17 @@
 #include "oatpp/core/macro/codegen.hpp"
 
 #include OATPP_CODEGEN_BEGIN(DTO)
-class AuthRequestDto:  public oatpp::DTO {
-    DTO_INIT(AuthRequestDto, DTO)
-    
-    DTO_FIELD(String, password);
-    DTO_FIELD(String, username);
-};
 
 class AuthResponseDto:  public oatpp::DTO {
     DTO_INIT(AuthResponseDto, DTO)
-    DTO_FIELD(String, access_token);
-    DTO_FIELD(String, role);
+    DTO_FIELD(Int64, client_id);
+    DTO_FIELD(String, scope_string);
+    DTO_FIELD(String, auth_url);
+};
+
+class CallbackRequestDto:  public oatpp::DTO {
+    DTO_INIT(CallbackRequestDto, DTO)
+    DTO_FIELD(Int64, auth_code);
 };
 
 class FullTicketResponseDto: public oatpp::DTO {

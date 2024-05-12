@@ -5,6 +5,7 @@ project( ${PROJECT_NAME} CXX )
 add_library_( ${PROJECT_NAME} STATIC 
     DEPENDS
         oatpp::oatpp
+        jwt-cpp::jwt-cpp
         base
         BL
 )

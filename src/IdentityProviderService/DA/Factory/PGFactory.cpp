@@ -7,7 +7,9 @@ PGDAFactory::CreateDAFacade()
 
     return (
       m_idaFacade = IDAFacadePtr( new PGFacade(
-        CreateUserRepository()
+        CreateUserRepository(),
+        CreateClientRepository(),
+        CreateAuthCodeRepository()
       ) )
     );
 }
@@ -19,5 +21,26 @@ PGDAFactory::CreateUserRepository()
     return m_userRepository ? m_userRepository
                             : ( m_userRepository = IUserRepositoryPtr(
                                   new PGUserRepository( connectionCreator )
+                                ) );
+}
+IAuthCodeRepositoryPtr
+PGDAFactory::CreateAuthCodeRepository()
+{
+    PGConnectionCreatorPtr connectionCreator =
+      PGConnectionCreatorPtr( new PGConnection( m_config ) );
+    return m_authCodeRepository ? m_authCodeRepository
+                            : ( m_authCodeRepository = IAuthCodeRepositoryPtr(
+                                  new PGAuthCodeRepository( connectionCreator )
+                                ) );
+}
+
+IClientRepositoryPtr
+PGDAFactory::CreateClientRepository()
+{
+    PGConnectionCreatorPtr connectionCreator =
+      PGConnectionCreatorPtr( new PGConnection( m_config ) );
+    return m_clientRepository ? m_clientRepository
+                            : ( m_clientRepository = IClientRepositoryPtr(
+                                  new PGClientRepository( connectionCreator )
                                 ) );
 }

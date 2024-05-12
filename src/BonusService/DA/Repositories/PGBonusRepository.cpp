@@ -70,7 +70,7 @@ BalanceResponse PGBonusRepository::GetBalanceByUsername(const std::string &usern
 BuyResponse PGBonusRepository::PerfromBuyOperation(const BuyRequest &request)
 {
     m_connectionCreator->CheckConnectAndReopenIfNeeded( m_conn );
-
+    
     std::string query(
             "select id, balance, status "
             "from privilege "
@@ -86,12 +86,46 @@ BuyResponse PGBonusRepository::PerfromBuyOperation(const BuyRequest &request)
                         .c_str()
         );
         PQclear( pgRes );
-        throw DatabaseExecutionException( "No such user!"
-        );
+        throw DatabaseExecutionException( "No such privelege!");
+    }
+
+    if (PQntuples( pgRes ) == 0 ){
+        
+        std::string query_create(
+        "insert into privilege (username, status, balance) values ('" +
+        request.username + "', 'BRONZE', 0) returning id;");
+        
+        PQclear( pgRes );
+        pgRes = PQexec( m_conn, query_create.c_str() );
+
+
+        if ( PQresultStatus( pgRes ) != PGRES_TUPLES_OK ) {
+            LoggerFactory::GetLogger()->LogWarning(
+                    ( std::string(
+                            "CreateBalanceByUsername: "
+                    ) +
+                    PQresultErrorMessage( pgRes ) )
+                            .c_str()
+            );
+            PQclear( pgRes );
+            throw DatabaseExecutionException( "unable to create privelege!");
+        }
+        PQclear( pgRes );    
+        pgRes = PQexec( m_conn, query.c_str() );
+        if ( PQresultStatus( pgRes ) != PGRES_TUPLES_OK ) {
+            LoggerFactory::GetLogger()->LogWarning(
+                    ( std::string(
+                            "GetBalanceByUsername: "
+                    ) +
+                    PQresultErrorMessage( pgRes ) )
+                            .c_str()
+            );
+            PQclear( pgRes );
+            throw DatabaseExecutionException( "No such privelege!");
+        }
     }
 
     BuyResponse response;
-
 
     std::map<std::string, std::string> res;
     for ( int i = 0; i < PQntuples( pgRes ); ++i ) {

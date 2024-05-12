@@ -1,15 +1,19 @@
 #include "User.h"
 User::User(
-        int id,
         const std::string& name,
-        const std::string& address,
-        const std::string& work,
-        const int& age
+        const std::string& login,
+        const std::string& email,
+        const std::string& mobilePhone,
+        const std::string& lastName,
+        const std::string& password,
+        const std::string& role      
 )
-  : id( id )
-  , name( name )
-  , address( address )
-  , work( work )
-  , age( age )
+  : name( name )
+  , login( login )
+  , email( email )
+  , mobilePhone( mobilePhone )
+  , lastName (lastName)
+  , password (password)
+  , role (role)
 {
 }

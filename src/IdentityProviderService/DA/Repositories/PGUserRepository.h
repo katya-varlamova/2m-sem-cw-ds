@@ -17,11 +17,10 @@ public:
         m_conn = connectionCreator->GetConnect();
         m_connectionCreator = connectionCreator;
     }
-    std::vector<User> GetUsers( ) override;
     int CreateUser( const User& user ) override;
-    User GetUserByID( int id ) override;
-    void UpdateUserByID( int id, const User& user ) override;
-    void DeleteUserByID( int id ) override;
+    User GetUserByLogin( const std::string &login) override;
+    void UpdateUserByLogin( const std::string &login, const User& user ) override;
+    void DeleteUserByLogin( const std::string &login ) override;
 
     ~PGUserRepository() override
     {

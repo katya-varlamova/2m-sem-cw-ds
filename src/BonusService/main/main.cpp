@@ -17,7 +17,7 @@ int main(int argc, const char* argv[]) {
             di::bind<IServer>().to<OatppServer>());
 
     auto server = injector.create<IServerPtr>();
-    LoggerFactory::InitLogger( injector.create<BaseConfigPtr>());
+    //LoggerFactory::InitLogger( injector.create<BaseConfigPtr>());
 
     server->run();
 

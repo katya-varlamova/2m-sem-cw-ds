@@ -53,3 +53,26 @@ CREATE TABLE privilege_history
         CHECK (operation_type IN ('FILL_IN_BALANCE', 'DEBIT_THE_ACCOUNT'))
 );
 
+\c persons
+
+create table if not exists Person (
+    login varchar(80) primary key,
+    name varchar(50),
+    email varchar(50),
+    mobilePhone varchar(50),
+    lastName varchar(50),
+    password varchar(50),
+    role varchar(50)
+    );
+
+create table if not exists Client (
+    client_id serial primary key,
+    client_secret varchar(50)
+);
+
+create table if not exists AuthCode (
+    code serial primary key,
+    client_id   INT REFERENCES Client (client_id),
+    login varchar(50),
+    scope_string varchar(200)
+);

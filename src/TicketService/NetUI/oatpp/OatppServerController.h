@@ -78,7 +78,7 @@ public:
                     dtoVector->push_back(TicketDto);
                 }
                 return _return(controller->createDtoResponse(Status::CODE_200, dtoVector));
-            } catch (DatabaseException) {
+            } catch (const DatabaseException &err) {
                 return _return(controller->createResponse(Status::CODE_500));
             }
         }
@@ -137,7 +137,7 @@ public:
                 auto response = controller->createDtoResponse(Status::CODE_200, TicketDto);
 
                 return _return(response);
-            } catch (DatabaseException) {
+            } catch (const DatabaseException &err) {
                 return _return(controller->createResponse(Status::CODE_500));
             }
         }
@@ -265,7 +265,7 @@ public:
             try {
                 facade->DeleteTicket(uuid, un);
                 return _return(controller->createResponse(Status::CODE_200));
-            } catch (DatabaseException) {
+            } catch (const DatabaseException &err) {
                 auto dto = ErrorResponse::createShared();
                 dto->message = "Not found!";
                 return _return(controller->createDtoResponse(Status::CODE_404, dto));

@@ -7,7 +7,7 @@ import reportWebVitals from "./reportWebVitals"
 import * as serviceWorker from "./serviceWorker"
 import axios from "axios";
 
-axios.defaults.withCredentials = true
+axios.defaults.withCredentials = false
 
 ReactDOM.render(
   <React.StrictMode>

@@ -6,25 +6,25 @@ HOST="127.0.0.1"
 URL = "http://" + HOST + ":8000/api/v1/persons"
 
 p1 = {"name" : "katya",
-      "age" : 22,
-      "address" : "moscow",
-      "work" : "huawei"}
+      "mobilePhone" : "22",
+      "login" : "moscow",
+      "email" : "huawei"}
 p2 = {"name" : "katya_2",
-      "age" : 23,
-      "address" : "moscow_2",
-      "work" : "huawei_2"}
+      "mobilePhone" : "23",
+      "login" : "moscow_2",
+      "email" : "huawei_2"}
 p3 = {"name" : "katya_3",
-      "age" : 24,
-      "address" : "moscow_3",
-      "work" : "huawei_3"
+      "mobilePhone" : "24",
+      "login" : "moscow_3",
+      "email" : "huawei_3"
       }
 p_upd = {"name" : "katya_u",
-         "age" : 25,
-         "address" : "moscow_u",
-         "work" : "huawei_u"
+         "mobilePhone" : "25",
+         "login" : "moscow_u",
+         "email" : "huawei_u"
                    }
 p_inv = {"nane" : "katya",
-         "work" : "huawei"}
+         "email" : "huawei"}
 p1j = json.dumps(p1)
 p2j = json.dumps(p2)
 p3j = json.dumps(p3)
@@ -38,7 +38,7 @@ class TestMain(unittest.TestCase):
     data = requests.get(URL + "/" + str(pid), headers=headers).json()
 
     status = requests.delete(URL + "/" + str(pid), headers=headers).status_code
-    exp = status == 204 and data["name"] == p1["name"] and data["age"] == p1["age"] and data["address"] == p1["address"] and data["work"] == p1["work"]
+    exp = status == 204 and data["name"] == p1["name"] and data["mobilePhone"] == p1["mobilePhone"] and data["login"] == p1["login"] and data["email"] == p1["email"]
     self.assertEqual(exp, True)
   def test_get_all(self):
     id1 = requests.post(URL, headers=headers, data = p1j).headers["Location"].split("/")[4]
@@ -57,7 +57,7 @@ class TestMain(unittest.TestCase):
     
     r = requests.patch(URL + "/" + str(id1), headers=headers, data = p_updj)
     data = r.json()
-    exp = data["name"] == p_upd["name"] and data["age"] == p_upd["age"] and data["address"] == p_upd["address"] and data["work"] == p_upd["work"]
+    exp = data["name"] == p_upd["name"] and data["mobilePhone"] == p_upd["mobilePhone"] and data["login"] == p_upd["login"] and data["email"] == p_upd["email"]
 
     requests.delete(URL + "/" + str(id1), headers=headers)
     self.assertEqual(exp, True)

@@ -84,7 +84,7 @@ public:
                 }
                 balanceResponseDto->history = dtoVector;
                 return _return(controller->createDtoResponse(Status::CODE_200, balanceResponseDto));
-            } catch (DatabaseException) {
+            } catch (const DatabaseException &err) {
                 return _return(controller->createResponse(Status::CODE_500));
             }
         }
@@ -175,7 +175,7 @@ public:
                 auto response = controller->createDtoResponse(Status::CODE_200, respDto);
 
                 return _return(response);
-            } catch (DatabaseException) {
+            } catch (const DatabaseException &err) {
                 return _return(controller->createResponse(Status::CODE_500));
             }
         }
@@ -232,7 +232,7 @@ public:
                 auto response = controller->createResponse(Status::CODE_200);
 
                 return _return(response);
-            } catch (DatabaseException) {
+            } catch (const DatabaseException &err) {
                 return _return(controller->createResponse(Status::CODE_500));
             }
         }

@@ -7,7 +7,7 @@ import Input from "components/Input";
 import RoundButton from "components/RoundButton";
 
 import { AuthRequest } from "types/Account"
-import { Login as LoginQuery } from "postAPI/accounts/Login";
+import { Login as LoginQuery, Callback } from "postAPI/accounts/Login";
 
 import styles from "./LoginPage.module.scss";
 
@@ -35,12 +35,28 @@ class LoginPage extends React.Component<LoginProps> {
         LoginQuery(this.acc).then(data => {
             button.disabled = false
             if (data.status === 200) {
-                window.location.href = '/';
-            } else {
+                Callback(data.auth_code).then(data => {
+                    if (data.status === 200) 
+                        window.location.href = '/';
+                    else {
+                        var title = document.getElementById("undertitle")
+                        if (title)
+                            title.innerText = "Ошибка авторизации!"
+                        button.disabled = false
+                    }
+                })
+            }
+             else {
                 var title = document.getElementById("undertitle")
                 if (title)
                     title.innerText = "Ошибка авторизации!"
+                button.disabled = false
             }
+        }).catch( () => {
+            var title = document.getElementById("undertitle")
+            if (title)
+                title.innerText = "Ошибка авторизации!"
+            button.disabled = false
         });
     }
 

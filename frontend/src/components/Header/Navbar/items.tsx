@@ -1,5 +1,6 @@
 export const navItems = {
     '': [
+        { name: "Новый пользователь", ref: "/auth/signup" }
     ],
     'admin': [
         { name: "Новый пользователь", ref: "/auth/signup" },

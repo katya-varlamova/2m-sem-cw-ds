@@ -16,31 +16,26 @@ type SignUpProps = {
     navigate: NavigateFunction
 }
 
-
 class SignUpPage extends React.Component<SignUpProps> {
+    
     acc: NewUserRequest = {
-        profile: {
-            firstName: "",
-            lastName: "",
-            email: "",
-            login: "",
-            mobilePhone: "555-415-1337",
-        },
-        credentials: {
-            password: {
-                value: ""
-            }
-        }
+        firstName: "",
+        lastName: "",
+        email: "",
+        login: "",
+        mobilePhone: "555-415-1337",
+        password: "",
+        role: localStorage.getItem("role") == "admin" ? "admin" : "user"
     }
     password: string = ""
     repPassword: string = ""
 
     setLogin(val: string) {
-        this.acc.profile.email = val
-        this.acc.profile.login = val
+        this.acc.email = val
+        this.acc.login = val
     }
-    setFirstName(val: string) {this.acc.profile.firstName = val}
-    setLastName(val: string) {this.acc.profile.lastName = val}
+    setFirstName(val: string) {this.acc.firstName = val}
+    setLastName(val: string) {this.acc.lastName = val}
     setPassword(val: string) {this.password = val}
     setRepPassword(val: string) {this.repPassword = val}
 
@@ -62,7 +57,7 @@ class SignUpPage extends React.Component<SignUpProps> {
         if (this.password !== this.repPassword)
             return this.highlightNotMatch()
         else
-            this.acc.credentials.password.value = this.password
+            this.acc.password = this.password
 
         // e.currentTarget.disabled = true
         var data = await CreateQuery(this.acc)
@@ -70,7 +65,7 @@ class SignUpPage extends React.Component<SignUpProps> {
         var title = document.getElementById("undertitle")
         if (title) {
             if (data.status === 200) {
-                title.innerText = `Аккаунт ${this.acc.profile.login} успешно создан`
+                title.innerText = `Аккаунт ${this.acc.login} успешно создан`
             } else {
                 title.innerText = "Ошибка создания аккаунта!"
             }
