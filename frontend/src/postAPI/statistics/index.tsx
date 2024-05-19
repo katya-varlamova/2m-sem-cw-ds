@@ -1,5 +1,6 @@
 import { RequestStat } from "types/Statistics";
 import axiosBackend from "..";
+import { log } from "console";
 
 function formatStartDateToRFC3339(date: Date) {
     const year = date.getUTCFullYear();
@@ -18,18 +19,20 @@ interface resp {
 }
 
 const ListRequests = async function (beginTime: Date, endTime: Date): Promise<resp> {
-    let strBegin = formatStartDateToRFC3339(beginTime)
-    let strEnd = formatStartDateToRFC3339(endTime)
-    const response = await axiosBackend.get(`requests?begin_time=${strBegin}&end_time=${strEnd}`);
-
-    const requestStats: RequestStat[] = response.data.requests.map((responseData) => {
+    let strBegin =  beginTime.getTime(); //formatStartDateToRFC3339(beginTime)
+    let strEnd =  endTime.getTime(); //formatStartDateToRFC3339(endTime)
+    console.log(strBegin);
+    console.log(strEnd);
+    const response = await axiosBackend.get(`statistics?begin_time=${strBegin}&end_time=${strEnd}`);
+    console.log(response);
+    const requestStats: RequestStat[] = response.data.items.map((responseData) => {
         return {
             path: responseData.path,
-            responseCode: responseData.responceCode,
+            responseCode: responseData.responseCode,
             method: responseData.method,
-            startedAt: new Date(responseData.startedAt),
-            finishedAt: new Date(responseData.finishedAt),
-            duration: responseData.duration,
+            startedAt: new Date(Number(responseData.startedAt)),
+            finishedAt: new Date(Number(responseData.finishedAt)),
+            duration: Number(responseData.duration),
             userName: responseData.userName
         };
     });

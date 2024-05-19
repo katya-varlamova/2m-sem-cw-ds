@@ -11,3 +11,5 @@ client_id: 1
 client_secret: "secret"
 auth_url : "/authorize"
 scope_string : "profile,email,openid"
+broker_address : "kafka:29092"
+broker_topic : "logs"

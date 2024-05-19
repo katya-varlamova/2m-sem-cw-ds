@@ -1,5 +1,60 @@
 version: "3"
 services:
+  zookeeper:
+    image: confluentinc/cp-zookeeper:7.3.2
+    ports:
+      - '31000:31000'
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000
+      KAFKA_JMX_HOSTNAME: "localhost"
+      KAFKA_JMX_PORT: 31000
+
+  kafka:
+    image: confluentinc/cp-kafka:7.3.2
+    ports:
+      - '9092:9092'
+      - '31001:31001'
+    depends_on:
+      - zookeeper
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:29092,PLAINTEXT_HOST://localhost:9092
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
+      # KAFKA_METRIC_REPORTERS: io.confluent.metrics.reporter.ConfluentMetricsReporter
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 100
+      # CONFLUENT_METRICS_REPORTER_BOOTSTRAP_SERVERS: kafka:29092
+      # CONFLUENT_METRICS_REPORTER_ZOOKEEPER_CONNECT: zookeeper:2181
+      # CONFLUENT_METRICS_REPORTER_TOPIC_REPLICAS: 1
+      # CONFLUENT_METRICS_ENABLE: 'false'
+      # CONFLUENT_SUPPORT_CUSTOMER_ID: 'anonymous'
+      KAFKA_JMX_HOSTNAME: "localhost"
+      KAFKA_JMX_PORT: 31001
+
+  kafka-broker:
+    image: kafka-broker
+    container_name: kafka-broker
+    restart: on-failure
+    build:
+      context: src/KafkaConsumer
+      dockerfile: Dockerfile
+    depends_on:
+      - kafka
+  # kafka-ui:
+  #   container_name: kafka-ui
+  #   image: provectuslabs/kafka-ui:latest
+  #   ports:
+  #     - 8090:8080
+  #   depends_on:
+  #     - kafka
+  #   environment:
+  #     DYNAMIC_CONFIG_ENABLED: true
+  #   volumes:
+  #     - ~/kui/config.yml:/etc/kafkaui/dynamic_config.yaml
   postgres:
     image: library/postgres:13
     container_name: postgres
@@ -50,6 +105,19 @@ services:
     depends_on:
       - postgres
 
+  statistics-service:
+    image: statistics-service
+    container_name: statistics-service
+    restart: on-failure
+    build:
+      context: src
+      dockerfile: StatistcsService/Dockerfile
+    ports:
+      - "8020:8020"
+    depends_on:
+      - postgres
+      - kafka-broker
+
   identity-provider-service:
     image: identity-provider-service
     container_name: identity-provider-service
@@ -76,6 +144,7 @@ services:
       - bonus-service
       - flight-service
       - identity-provider-service
+      - statistics-service
 
 volumes:
   db-data:

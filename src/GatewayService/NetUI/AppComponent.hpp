@@ -3,6 +3,7 @@
 #include "service/TicketService.hpp"
 #include "service/FlightService.hpp"
 #include "service/BonusService.hpp"
+#include "service/StatisticsService.hpp"
 #include "service/IdentityProviderService.hpp"
 #include "oatpp/web/server/AsyncHttpConnectionHandler.hpp"
 #include "oatpp/web/server/HttpRouter.hpp"
@@ -31,14 +32,21 @@ private:
   HostPort m_ticketService;
   HostPort m_bonusService;
   HostPort m_identityProviderService;
+  HostPort m_statisticsService;
 public:
 
-  AppComponent(const HostPort& facade, const HostPort& flightService, const HostPort& ticketService, const HostPort& bonusService, const HostPort& identityProviderService)
+  AppComponent(const HostPort& facade, 
+  const HostPort& flightService, 
+  const HostPort& ticketService, 
+  const HostPort& bonusService, 
+  const HostPort& identityProviderService,
+  const HostPort& statisticsService)
     : m_facade(facade)
     , m_flightService(flightService)
     , m_ticketService(ticketService)
     , m_bonusService(bonusService)
     , m_identityProviderService(identityProviderService)
+    , m_statisticsService(statisticsService)
   {}
 
     OATPP_CREATE_COMPONENT(std::shared_ptr<oatpp::async::Executor>, executor)([] {
@@ -151,6 +159,24 @@ public:
 
         auto requestExecutor = oatpp::web::client::HttpRequestExecutor::createShared(connectionPool);
         return IdentityProviderService::createShared(requestExecutor, objectMapper);
+
+    }());
+
+        /**
+     * Create StatisticsService component
+     */
+    OATPP_CREATE_COMPONENT(std::shared_ptr<StatisticsService>, statisticsService)(Qualifiers::SERVICE_FACADE, [this] {
+
+        OATPP_COMPONENT(std::shared_ptr<oatpp::data::mapping::ObjectMapper>, objectMapper, Qualifiers::SERVICE_FACADE);
+
+        std::shared_ptr<oatpp::network::ClientConnectionProvider> connectionProvider;
+
+        connectionProvider = oatpp::network::tcp::client::ConnectionProvider::createShared({m_statisticsService.host, m_statisticsService.port});
+
+        auto connectionPool = oatpp::network::ClientConnectionPool::createShared(connectionProvider, 10, std::chrono::seconds(5));
+
+        auto requestExecutor = oatpp::web::client::HttpRequestExecutor::createShared(connectionPool);
+        return StatisticsService::createShared(requestExecutor, objectMapper);
 
     }());
 };

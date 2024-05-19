@@ -21,8 +21,10 @@ using IServerPtr = std::shared_ptr<IServer>;
 
 class OatppServer : public IServer {
 public:
-    BOOST_DI_INJECT(OatppServer, const std::shared_ptr<BaseConfig>& config ) {
+    BOOST_DI_INJECT(OatppServer, const std::shared_ptr<BaseConfig>& config, const std::shared_ptr<IProducer>& producer) {
         GatewayController::config = config;
+        producer->Prepare();
+        GatewayController::producer = producer;
     }
   void run() override;
 };

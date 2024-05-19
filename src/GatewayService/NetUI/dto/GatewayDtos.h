@@ -5,6 +5,20 @@
 
 #include OATPP_CODEGEN_BEGIN(DTO)
 
+class StatisticRequestDto: public oatpp::DTO {
+    DTO_INIT(StatisticRequestDto, DTO)
+    DTO_FIELD(String, path);
+    DTO_FIELD(Int64, responseCode);
+    DTO_FIELD(String, method);
+    DTO_FIELD(String, startedAt);
+    DTO_FIELD(String, finishedAt);
+    DTO_FIELD(String, duration);
+    DTO_FIELD(String, userName);
+};
+class StatisticsResponseDto: public oatpp::DTO {
+    DTO_INIT(StatisticsResponseDto, DTO)
+    DTO_FIELD(Vector<Object<StatisticRequestDto>>, items);
+};
 class AuthResponseDto:  public oatpp::DTO {
     DTO_INIT(AuthResponseDto, DTO)
     DTO_FIELD(Int64, client_id);

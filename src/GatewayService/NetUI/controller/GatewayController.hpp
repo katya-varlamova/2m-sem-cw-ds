@@ -10,9 +10,10 @@
 #include "service/BonusService.hpp"
 #include "service/FlightService.hpp"
 #include "service/TicketService.hpp"
+#include "service/StatisticsService.hpp"
 #include "service/IdentityProviderService.hpp"
 #include "oatpp/web/server/api/ApiController.hpp"
-
+#include "producer/IProducer.h"
 #include "oatpp/parser/json/mapping/ObjectMapper.hpp"
 #include "oatpp/core/macro/codegen.hpp"
 #include "oatpp/core/macro/component.hpp"
@@ -31,6 +32,8 @@ protected:
 
 public:
     static std::shared_ptr<BaseConfig> config;
+    static std::shared_ptr<IProducer> producer;
+    static std::shared_ptr<StatisticsService> statisticsService;
     static std::shared_ptr<BonusService> bonusService;
     static std::shared_ptr<FlightService> flightService;
     static std::shared_ptr<TicketService> ticketService;
@@ -40,9 +43,40 @@ public:
                                                                            objectMapper)) {
         return std::shared_ptr<GatewayController>(new GatewayController(objectMapper));
     }
+
+ ENDPOINT_ASYNC("GET", "/api/v1/statistics", StatisticsGetPoint ) {
+
+    ENDPOINT_ASYNC_INIT(StatisticsGetPoint)
+        Action act() override {
+            std::string begin_time = request->getQueryParameter("begin_time");
+            std::string end_time = request->getQueryParameter("end_time");
+            auto response = statisticsService->StatisticsGetPoint(begin_time, end_time);
+            if (response->getStatusCode() != 200)
+            {
+                auto resp = controller->createResponse(Status::CODE_500);
+                resp->putHeaderIfNotExists("Access-Control-Allow-Methods", "GET, POST, PUT, OPTIONS, DELETE");
+                resp->putHeaderIfNotExists("Access-Control-Allow-Origin", "*");
+                resp->putHeaderIfNotExists("Access-Control-Max-Age", "1728000");
+
+                return _return(resp);
+            }
+            auto stats = response->readBodyToDto<oatpp::Object<StatisticsResponseDto>>(
+                    controller->getDefaultObjectMapper());
+            auto resp = controller->createDtoResponse(Status::CODE_200, stats);
+            resp->putHeaderIfNotExists("Access-Control-Allow-Methods", "GET, POST, PUT, OPTIONS, DELETE");
+            resp->putHeaderIfNotExists("Access-Control-Allow-Origin", "*");
+            resp->putHeaderIfNotExists("Access-Control-Max-Age", "1728000");
+
+            return _return(resp);
+        }
+
+    };
+
     ENDPOINT_ASYNC("POST", "/api/v1/authorize", AuthPoint ) {
     ENDPOINT_ASYNC_INIT(AuthPoint)
         Action act() override {
+            auto startTime =  std::chrono::system_clock::now().time_since_epoch() / std::chrono::milliseconds(1);
+
             auto dto = AuthResponseDto::createShared();
             dto->client_id = config->GetIntField( { ClientIDSection });
             dto->auth_url = std::string(config->GetStringField( { AuthURLSection }));
@@ -53,6 +87,9 @@ public:
             resp->putHeaderIfNotExists("Access-Control-Allow-Origin", "*");
             resp->putHeaderIfNotExists("Access-Control-Max-Age", "1728000");
 
+            auto finishTime = std::chrono::system_clock::now().time_since_epoch() / std::chrono::milliseconds(1);
+            LogString s("/api/v1/authorize",  "POST", std::to_string(startTime), std::to_string(finishTime), std::to_string(finishTime - startTime), "unknown", 200);
+            producer->PostToBroker(s);
             return _return(resp);
         }
     };
@@ -63,6 +100,7 @@ public:
             return request->readBodyToStringAsync().callbackTo(&CallbackPoint::Response);
         }
         Action Response( const oatpp::String& str) {
+            auto startTime =  std::chrono::system_clock::now().time_since_epoch() / std::chrono::milliseconds(1);
             oatpp::Object<CallbackRequestDto> body;
             try {
                 body = controller->getDefaultObjectMapper()->readFromString<oatpp::Object<CallbackRequestDto>>(str);
@@ -76,7 +114,9 @@ public:
                 resp->putHeaderIfNotExists("Access-Control-Allow-Methods", "GET, POST, PUT, OPTIONS, DELETE");
                 resp->putHeaderIfNotExists("Access-Control-Allow-Origin", "*");
                 resp->putHeaderIfNotExists("Access-Control-Max-Age", "1728000");
-
+                auto finishTime = std::chrono::system_clock::now().time_since_epoch() / std::chrono::milliseconds(1);
+                LogString s("/api/v1/callback",  "POST", std::to_string(startTime), std::to_string(finishTime), std::to_string(finishTime - startTime), "unknown", 400);
+                producer->PostToBroker(s);
                 return _return(resp);
             }
 
@@ -85,8 +125,6 @@ public:
             dto->client_secret = std::string(config->GetStringField( { ClientSecretSection }));
             dto->auth_code = body->auth_code;
             
-            LoggerFactory::GetLogger()->LogWarning(std::string(dto->client_secret).c_str());
-            LoggerFactory::GetLogger()->LogWarning(std::to_string(dto->auth_code).c_str());
 
             auto response = identityProviderService->TokenGetPoint(dto);
 
@@ -96,11 +134,12 @@ public:
                 resp->putHeaderIfNotExists("Access-Control-Allow-Methods", "GET, POST, PUT, OPTIONS, DELETE");
                 resp->putHeaderIfNotExists("Access-Control-Allow-Origin", "*");
                 resp->putHeaderIfNotExists("Access-Control-Max-Age", "1728000");
-
+                auto finishTime = std::chrono::system_clock::now().time_since_epoch() / std::chrono::milliseconds(1);
+                LogString s("/api/v1/callback",  "POST", std::to_string(startTime), std::to_string(finishTime), std::to_string(finishTime - startTime), "unknown", 500);
+                producer->PostToBroker(s);
                 return _return(resp);
             }
 
-             LoggerFactory::GetLogger()->LogWarning("here");
             auto tokenResp = response->readBodyToDto<oatpp::Object<TokenResponseDto>>(
                     controller->getDefaultObjectMapper());
             auto resp = controller->createDtoResponse(Status::CODE_200, tokenResp);
@@ -108,6 +147,9 @@ public:
             resp->putHeaderIfNotExists("Access-Control-Allow-Origin", "*");
             resp->putHeaderIfNotExists("Access-Control-Max-Age", "1728000");
 
+            auto finishTime = std::chrono::system_clock::now().time_since_epoch() / std::chrono::milliseconds(1);
+            LogString s("/api/v1/callback",  "POST", std::to_string(startTime), std::to_string(finishTime), std::to_string(finishTime - startTime), "unknown", 200);
+            producer->PostToBroker(s);
             return _return(resp);
         }
     };
@@ -116,8 +158,9 @@ public:
     ENDPOINT_ASYNC_INIT(FlightsGetPoint)
 
         Action act() override {
-
+            auto startTime =  std::chrono::system_clock::now().time_since_epoch() / std::chrono::milliseconds(1);
             int page = std::stoi(request->getQueryParameter("page"));
+            int pageSize = std::stoi(request->getQueryParameter("size"));
             if (page < 1){
                 auto dto = ValidationErrorResponse::createShared();
                 dto->message = "Invalid data";
@@ -129,10 +172,28 @@ public:
                 resp->putHeaderIfNotExists("Access-Control-Allow-Origin", "*");
                 resp->putHeaderIfNotExists("Access-Control-Max-Age", "1728000");
 
+                std::string username_log = "unknown";
+                auto auth_token = request->getHeader("Authorization");
+                if (auth_token) {
+                    JWTAuth auth(config);
+                    auto token = auth.extractToken(auth_token);
+                    if (auth.checkToken(token))
+                        username_log = auth.getLogin(token);
+                }
+
+                auto finishTime = std::chrono::system_clock::now().time_since_epoch() / std::chrono::milliseconds(1);
+                LogString s("/api/v1/flights?page=" + std::to_string(page) + "size=" + std::to_string(pageSize),  
+                            "GET", 
+                            std::to_string(startTime), 
+                            std::to_string(finishTime), 
+                            std::to_string(finishTime - startTime), 
+                            username_log, 
+                            400);
+                producer->PostToBroker(s);
                 return _return(resp);
             }
 
-            int pageSize = std::stoi(request->getQueryParameter("size"));
+            
             if (pageSize < 1 || pageSize > 100){
                 auto dto = ValidationErrorResponse::createShared();
                 dto->message = "Invalid data";
@@ -143,7 +204,24 @@ public:
                 resp->putHeaderIfNotExists("Access-Control-Allow-Methods", "GET, POST, PUT, OPTIONS, DELETE");
                 resp->putHeaderIfNotExists("Access-Control-Allow-Origin", "*");
                 resp->putHeaderIfNotExists("Access-Control-Max-Age", "1728000");
+                std::string username_log = "unknown";
+                auto auth_token = request->getHeader("Authorization");
+                if (auth_token) {
+                    JWTAuth auth(config);
+                    auto token = auth.extractToken(auth_token);
+                    if (auth.checkToken(token))
+                        username_log = auth.getLogin(token);
+                }
 
+                auto finishTime = std::chrono::system_clock::now().time_since_epoch() / std::chrono::milliseconds(1);
+                LogString s("/api/v1/flights?page=" + std::to_string(page) + "size=" + std::to_string(pageSize),  
+                            "GET", 
+                            std::to_string(startTime), 
+                            std::to_string(finishTime), 
+                            std::to_string(finishTime - startTime), 
+                            username_log, 
+                            400);
+                producer->PostToBroker(s);
                 return _return(resp);
             }
 
@@ -155,7 +233,24 @@ public:
                 resp->putHeaderIfNotExists("Access-Control-Allow-Methods", "GET, POST, PUT, OPTIONS, DELETE");
                 resp->putHeaderIfNotExists("Access-Control-Allow-Origin", "*");
                 resp->putHeaderIfNotExists("Access-Control-Max-Age", "1728000");
+                std::string username_log = "unknown";
+                auto auth_token = request->getHeader("Authorization");
+                if (auth_token) {
+                    JWTAuth auth(config);
+                    auto token = auth.extractToken(auth_token);
+                    if (auth.checkToken(token))
+                        username_log = auth.getLogin(token);
+                }
 
+                auto finishTime = std::chrono::system_clock::now().time_since_epoch() / std::chrono::milliseconds(1);
+                LogString s("/api/v1/flights?page=" + std::to_string(page) + "size=" + std::to_string(pageSize),  
+                            "GET", 
+                            std::to_string(startTime), 
+                            std::to_string(finishTime), 
+                            std::to_string(finishTime - startTime), 
+                            username_log, 
+                            500);
+                producer->PostToBroker(s);
                 return _return(resp);
             }
 
@@ -165,7 +260,24 @@ public:
             resp->putHeaderIfNotExists("Access-Control-Allow-Methods", "GET, POST, PUT, OPTIONS, DELETE");
             resp->putHeaderIfNotExists("Access-Control-Allow-Origin", "*");
             resp->putHeaderIfNotExists("Access-Control-Max-Age", "1728000");
+            std::string username_log = "unknown";
+            auto auth_token = request->getHeader("Authorization");
+            if (auth_token) {
+                JWTAuth auth(config);
+                auto token = auth.extractToken(auth_token);
+                if (auth.checkToken(token))
+                    username_log = auth.getLogin(token);
+            }
 
+            auto finishTime = std::chrono::system_clock::now().time_since_epoch() / std::chrono::milliseconds(1);
+            LogString s("/api/v1/flights?page=" + std::to_string(page) + "size=" + std::to_string(pageSize),  
+                        "GET", 
+                        std::to_string(startTime), 
+                        std::to_string(finishTime), 
+                        std::to_string(finishTime - startTime), 
+                        username_log, 
+                        200);
+            producer->PostToBroker(s);
             return _return(resp);
         }
 
@@ -175,7 +287,7 @@ public:
     ENDPOINT_ASYNC_INIT(FlightGetPoint)
 
         Action act() override {
-
+            auto startTime =  std::chrono::system_clock::now().time_since_epoch() / std::chrono::milliseconds(1);
             std::string flight_number = request->getPathVariable("flight_number");
             if (flight_number.empty()){
                 auto dto = ValidationErrorResponse::createShared();
@@ -187,7 +299,24 @@ public:
                 resp->putHeaderIfNotExists("Access-Control-Allow-Methods", "GET, POST, PUT, OPTIONS, DELETE");
                 resp->putHeaderIfNotExists("Access-Control-Allow-Origin", "*");
                 resp->putHeaderIfNotExists("Access-Control-Max-Age", "1728000");
+                std::string username_log = "unknown";
+                auto auth_token = request->getHeader("Authorization");
+                if (auth_token) {
+                    JWTAuth auth(config);
+                    auto token = auth.extractToken(auth_token);
+                    if (auth.checkToken(token))
+                        username_log = auth.getLogin(token);
+                }
 
+                auto finishTime = std::chrono::system_clock::now().time_since_epoch() / std::chrono::milliseconds(1);
+                LogString s("/api/v1/flights/" + flight_number,  
+                            "GET", 
+                            std::to_string(startTime), 
+                            std::to_string(finishTime), 
+                            std::to_string(finishTime - startTime), 
+                            username_log, 
+                            400);
+                producer->PostToBroker(s);
                 return _return(resp);
             }
 
@@ -199,7 +328,24 @@ public:
                 resp->putHeaderIfNotExists("Access-Control-Allow-Methods", "GET, POST, PUT, OPTIONS, DELETE");
                 resp->putHeaderIfNotExists("Access-Control-Allow-Origin", "*");
                 resp->putHeaderIfNotExists("Access-Control-Max-Age", "1728000");
+                std::string username_log = "unknown";
+                auto auth_token = request->getHeader("Authorization");
+                if (auth_token) {
+                    JWTAuth auth(config);
+                    auto token = auth.extractToken(auth_token);
+                    if (auth.checkToken(token))
+                        username_log = auth.getLogin(token);
+                }
 
+                auto finishTime = std::chrono::system_clock::now().time_since_epoch() / std::chrono::milliseconds(1);
+                LogString s("/api/v1/flights/" + flight_number,  
+                            "GET", 
+                            std::to_string(startTime), 
+                            std::to_string(finishTime), 
+                            std::to_string(finishTime - startTime), 
+                            username_log, 
+                            500);
+                producer->PostToBroker(s);
                 return _return(resp);
             }
 
@@ -209,7 +355,24 @@ public:
             resp->putHeaderIfNotExists("Access-Control-Allow-Methods", "GET, POST, PUT, OPTIONS, DELETE");
             resp->putHeaderIfNotExists("Access-Control-Allow-Origin", "*");
             resp->putHeaderIfNotExists("Access-Control-Max-Age", "1728000");
+            std::string username_log = "unknown";
+            auto auth_token = request->getHeader("Authorization");
+            if (auth_token) {
+                JWTAuth auth(config);
+                auto token = auth.extractToken(auth_token);
+                if (auth.checkToken(token))
+                    username_log = auth.getLogin(token);
+            }
 
+            auto finishTime = std::chrono::system_clock::now().time_since_epoch() / std::chrono::milliseconds(1);
+            LogString s("/api/v1/flights/" + flight_number,  
+                        "GET", 
+                        std::to_string(startTime), 
+                        std::to_string(finishTime), 
+                        std::to_string(finishTime - startTime), 
+                        username_log, 
+                        200);
+            producer->PostToBroker(s);
             return _return(resp);
         }
 
@@ -218,7 +381,8 @@ public:
     ENDPOINT_ASYNC("GET", "/api/v1/tickets/{ticketUid}", TicketGetPoint) {
     ENDPOINT_ASYNC_INIT(TicketGetPoint)
         Action act() override {
-           auto auth_token = request->getHeader("Authorization");
+            auto startTime =  std::chrono::system_clock::now().time_since_epoch() / std::chrono::milliseconds(1);
+            auto auth_token = request->getHeader("Authorization");
             if (!auth_token) {
                 auto dto = ValidationErrorResponse::createShared();
                 dto->message = "Invalid data";
@@ -230,6 +394,16 @@ public:
                 resp->putHeaderIfNotExists("Access-Control-Allow-Origin", "*");
                 resp->putHeaderIfNotExists("Access-Control-Max-Age", "1728000");
 
+                std::string username_log = "unknown";
+                auto finishTime = std::chrono::system_clock::now().time_since_epoch() / std::chrono::milliseconds(1);
+                LogString s("/api/v1/tickets/" + request->getPathVariable("ticketUid"),  
+                            "GET", 
+                            std::to_string(startTime), 
+                            std::to_string(finishTime), 
+                            std::to_string(finishTime - startTime), 
+                            username_log, 
+                            401);
+                producer->PostToBroker(s);
                 return _return(resp);
             }
             JWTAuth auth(config);
@@ -245,6 +419,16 @@ public:
                 resp->putHeaderIfNotExists("Access-Control-Allow-Origin", "*");
                 resp->putHeaderIfNotExists("Access-Control-Max-Age", "1728000");
 
+                std::string username_log = "unknown";
+                auto finishTime = std::chrono::system_clock::now().time_since_epoch() / std::chrono::milliseconds(1);
+                LogString s("/api/v1/tickets/" + request->getPathVariable("ticketUid"),  
+                            "GET", 
+                            std::to_string(startTime), 
+                            std::to_string(finishTime), 
+                            std::to_string(finishTime - startTime), 
+                            username_log, 
+                            401);
+                producer->PostToBroker(s);
                 return _return(resp);
             }
             
@@ -259,7 +443,17 @@ public:
                 resp->putHeaderIfNotExists("Access-Control-Allow-Methods", "GET, POST, PUT, OPTIONS, DELETE");
                 resp->putHeaderIfNotExists("Access-Control-Allow-Origin", "*");
                 resp->putHeaderIfNotExists("Access-Control-Max-Age", "1728000");
-
+                
+                std::string username_log = auth.getLogin(token);
+                auto finishTime = std::chrono::system_clock::now().time_since_epoch() / std::chrono::milliseconds(1);
+                LogString s("/api/v1/tickets/" + uuid,
+                            "GET", 
+                            std::to_string(startTime), 
+                            std::to_string(finishTime), 
+                            std::to_string(finishTime - startTime), 
+                            username_log, 
+                            400);
+                producer->PostToBroker(s);
                 return _return(resp);
             }
 
@@ -271,14 +465,32 @@ public:
                     resp->putHeaderIfNotExists("Access-Control-Allow-Methods", "GET, POST, PUT, OPTIONS, DELETE");
                     resp->putHeaderIfNotExists("Access-Control-Allow-Origin", "*");
                     resp->putHeaderIfNotExists("Access-Control-Max-Age", "1728000");
-
+                    std::string username_log = auth.getLogin(token);
+                    auto finishTime = std::chrono::system_clock::now().time_since_epoch() / std::chrono::milliseconds(1);
+                    LogString s("/api/v1/tickets/" + uuid,
+                                "GET", 
+                                std::to_string(startTime), 
+                                std::to_string(finishTime), 
+                                std::to_string(finishTime - startTime), 
+                                username_log, 
+                                404);
+                    producer->PostToBroker(s);
                     return _return(resp);
                 }
                 auto resp = controller->createResponse(Status::CODE_500);
                 resp->putHeaderIfNotExists("Access-Control-Allow-Methods", "GET, POST, PUT, OPTIONS, DELETE");
                 resp->putHeaderIfNotExists("Access-Control-Allow-Origin", "*");
                 resp->putHeaderIfNotExists("Access-Control-Max-Age", "1728000");
-
+                std::string username_log = auth.getLogin(token);
+                auto finishTime = std::chrono::system_clock::now().time_since_epoch() / std::chrono::milliseconds(1);
+                LogString s("/api/v1/tickets/" + uuid,
+                            "GET", 
+                            std::to_string(startTime), 
+                            std::to_string(finishTime), 
+                            std::to_string(finishTime - startTime), 
+                            username_log, 
+                            500);
+                producer->PostToBroker(s);
                 return _return(resp);
             }
             auto ticket = ticketResponse->readBodyToDto<oatpp::Object<TicketResponseDto>>(controller->getDefaultObjectMapper());
@@ -290,7 +502,16 @@ public:
                 resp->putHeaderIfNotExists("Access-Control-Allow-Methods", "GET, POST, PUT, OPTIONS, DELETE");
                 resp->putHeaderIfNotExists("Access-Control-Allow-Origin", "*");
                 resp->putHeaderIfNotExists("Access-Control-Max-Age", "1728000");
-
+                std::string username_log = auth.getLogin(token);
+                auto finishTime = std::chrono::system_clock::now().time_since_epoch() / std::chrono::milliseconds(1);
+                LogString s("/api/v1/tickets/" + uuid,
+                            "GET", 
+                            std::to_string(startTime), 
+                            std::to_string(finishTime), 
+                            std::to_string(finishTime - startTime), 
+                            username_log, 
+                            500);
+                producer->PostToBroker(s);
                 return _return(resp);
             }
             auto flight = flightResponse->readBodyToDto<oatpp::Object<FlightResponseDto>>(controller->getDefaultObjectMapper());
@@ -307,7 +528,16 @@ public:
             resp->putHeaderIfNotExists("Access-Control-Allow-Methods", "GET, POST, PUT, OPTIONS, DELETE");
             resp->putHeaderIfNotExists("Access-Control-Allow-Origin", "*");
             resp->putHeaderIfNotExists("Access-Control-Max-Age", "1728000");
-
+            std::string username_log = auth.getLogin(token);
+            auto finishTime = std::chrono::system_clock::now().time_since_epoch() / std::chrono::milliseconds(1);
+            LogString s("/api/v1/tickets/" + uuid,
+                        "GET", 
+                        std::to_string(startTime), 
+                        std::to_string(finishTime), 
+                        std::to_string(finishTime - startTime), 
+                        username_log, 
+                        200);
+            producer->PostToBroker(s);
             return _return(resp);
 
         }
@@ -317,7 +547,8 @@ public:
     ENDPOINT_ASYNC("GET", "/api/v1/tickets", TicketsGetPoint) {
     ENDPOINT_ASYNC_INIT(TicketsGetPoint)
         Action act() override {
-           auto auth_token = request->getHeader("Authorization");
+            auto startTime =  std::chrono::system_clock::now().time_since_epoch() / std::chrono::milliseconds(1);
+            auto auth_token = request->getHeader("Authorization");
             if (!auth_token) {
                 auto dto = ValidationErrorResponse::createShared();
                 dto->message = "Invalid data";
@@ -328,7 +559,16 @@ public:
                 resp->putHeaderIfNotExists("Access-Control-Allow-Methods", "GET, POST, PUT, OPTIONS, DELETE");
                 resp->putHeaderIfNotExists("Access-Control-Allow-Origin", "*");
                 resp->putHeaderIfNotExists("Access-Control-Max-Age", "1728000");
-
+                std::string username_log = "unknown";
+                auto finishTime = std::chrono::system_clock::now().time_since_epoch() / std::chrono::milliseconds(1);
+                LogString s("/api/v1/tickets",  
+                            "GET", 
+                            std::to_string(startTime), 
+                            std::to_string(finishTime), 
+                            std::to_string(finishTime - startTime), 
+                            username_log, 
+                            401);
+                producer->PostToBroker(s);
                 return _return(resp);
             }
             JWTAuth auth(config);
@@ -343,7 +583,16 @@ public:
                 resp->putHeaderIfNotExists("Access-Control-Allow-Methods", "GET, POST, PUT, OPTIONS, DELETE");
                 resp->putHeaderIfNotExists("Access-Control-Allow-Origin", "*");
                 resp->putHeaderIfNotExists("Access-Control-Max-Age", "1728000");
-
+                std::string username_log = "unknown";
+                auto finishTime = std::chrono::system_clock::now().time_since_epoch() / std::chrono::milliseconds(1);
+                LogString s("/api/v1/tickets",  
+                            "GET", 
+                            std::to_string(startTime), 
+                            std::to_string(finishTime), 
+                            std::to_string(finishTime - startTime), 
+                            username_log, 
+                            401);
+                producer->PostToBroker(s);
                 return _return(resp);
             }
 
@@ -353,7 +602,16 @@ public:
                 resp->putHeaderIfNotExists("Access-Control-Allow-Methods", "GET, POST, PUT, OPTIONS, DELETE");
                 resp->putHeaderIfNotExists("Access-Control-Allow-Origin", "*");
                 resp->putHeaderIfNotExists("Access-Control-Max-Age", "1728000");
-
+                std::string username_log = auth.getLogin(token);
+                auto finishTime = std::chrono::system_clock::now().time_since_epoch() / std::chrono::milliseconds(1);
+                LogString s("/api/v1/tickets",  
+                            "GET", 
+                            std::to_string(startTime), 
+                            std::to_string(finishTime), 
+                            std::to_string(finishTime - startTime), 
+                            username_log, 
+                            500);
+                producer->PostToBroker(s);
                 return _return(resp);
             }
             auto tickets = ticketsResponse->readBodyToDto<oatpp::Vector<oatpp::Object<TicketResponseDto>>>(
@@ -366,7 +624,16 @@ public:
                     resp->putHeaderIfNotExists("Access-Control-Allow-Methods", "GET, POST, PUT, OPTIONS, DELETE");
                     resp->putHeaderIfNotExists("Access-Control-Allow-Origin", "*");
                     resp->putHeaderIfNotExists("Access-Control-Max-Age", "1728000");
-
+                    std::string username_log = auth.getLogin(token);
+                    auto finishTime = std::chrono::system_clock::now().time_since_epoch() / std::chrono::milliseconds(1);
+                    LogString s("/api/v1/tickets",  
+                                "GET", 
+                                std::to_string(startTime), 
+                                std::to_string(finishTime), 
+                                std::to_string(finishTime - startTime), 
+                                username_log, 
+                                500);
+                    producer->PostToBroker(s);
                     return _return(resp);
                 }
                 auto flight = flightResponse->readBodyToDto<oatpp::Object<FlightResponseDto>>(
@@ -386,7 +653,16 @@ public:
             resp->putHeaderIfNotExists("Access-Control-Allow-Methods", "GET, POST, PUT, OPTIONS, DELETE");
             resp->putHeaderIfNotExists("Access-Control-Allow-Origin", "*");
             resp->putHeaderIfNotExists("Access-Control-Max-Age", "1728000");
-
+            std::string username_log = auth.getLogin(token);
+            auto finishTime = std::chrono::system_clock::now().time_since_epoch() / std::chrono::milliseconds(1);
+            LogString s("/api/v1/tickets",  
+                        "GET", 
+                        std::to_string(startTime), 
+                        std::to_string(finishTime), 
+                        std::to_string(finishTime - startTime), 
+                        username_log, 
+                        200);
+            producer->PostToBroker(s);
             return _return(resp);
         }
 
@@ -396,62 +672,7 @@ public:
     ENDPOINT_ASYNC_INIT(PrivilegeGetPoint)
 
         Action act() override {
-           auto auth_token = request->getHeader("Authorization"); 
-            if (!auth_token) {
-                auto dto = ValidationErrorResponse::createShared();
-                dto->message = "Invalid data";
-                oatpp::Vector<String> errors({});
-                errors->push_back("Invalid request header: no auth token provided");
-                dto->errors = errors;
-                auto resp = controller->createDtoResponse(Status::CODE_401, dto);
-                resp->putHeaderIfNotExists("Access-Control-Allow-Methods", "GET, POST, PUT, OPTIONS, DELETE");
-                resp->putHeaderIfNotExists("Access-Control-Allow-Origin", "*");
-                resp->putHeaderIfNotExists("Access-Control-Max-Age", "1728000");
-
-                return _return(resp);
-            }
-            JWTAuth auth(config);
-            auto token = auth.extractToken(auth_token);
-            if (!auth.checkToken(token))  {
-                auto dto = ValidationErrorResponse::createShared();
-                dto->message = "Invalid data";
-                oatpp::Vector<String> errors({});
-                errors->push_back("Invalid request header: wrong tiken provided");
-                dto->errors = errors;
-                auto resp = controller->createDtoResponse(Status::CODE_401, dto);
-                resp->putHeaderIfNotExists("Access-Control-Allow-Methods", "GET, POST, PUT, OPTIONS, DELETE");
-                resp->putHeaderIfNotExists("Access-Control-Allow-Origin", "*");
-                resp->putHeaderIfNotExists("Access-Control-Max-Age", "1728000");
-
-                return _return(resp);
-            }
-
-            auto bonusResponse = bonusService->BalanceGetPoint(auth_token);
-            if (bonusResponse->getStatusCode() != 200) {
-                auto resp = controller->createResponse(Status::CODE_500);
-                resp->putHeaderIfNotExists("Access-Control-Allow-Methods", "GET, POST, PUT, OPTIONS, DELETE");
-                resp->putHeaderIfNotExists("Access-Control-Allow-Origin", "*");
-                resp->putHeaderIfNotExists("Access-Control-Max-Age", "1728000");
-
-                return _return(resp);
-            }
-            auto bonus = bonusResponse->readBodyToDto<oatpp::Object<BalanceResponseDto>>(
-                    controller->getDefaultObjectMapper());
-
-            auto resp = controller->createDtoResponse(Status::CODE_200, bonus);
-            resp->putHeaderIfNotExists("Access-Control-Allow-Methods", "GET, POST, PUT, OPTIONS, DELETE");
-            resp->putHeaderIfNotExists("Access-Control-Allow-Origin", "*");
-            resp->putHeaderIfNotExists("Access-Control-Max-Age", "1728000");
-
-            return _return(resp);
-        }
-
-    };
-
-    ENDPOINT_ASYNC("GET", "/api/v1/me", MeGetPoint) {
-    ENDPOINT_ASYNC_INIT(MeGetPoint)
-
-        Action act() override {
+            auto startTime =  std::chrono::system_clock::now().time_since_epoch() / std::chrono::milliseconds(1);
             auto auth_token = request->getHeader("Authorization"); 
             if (!auth_token) {
                 auto dto = ValidationErrorResponse::createShared();
@@ -463,7 +684,16 @@ public:
                 resp->putHeaderIfNotExists("Access-Control-Allow-Methods", "GET, POST, PUT, OPTIONS, DELETE");
                 resp->putHeaderIfNotExists("Access-Control-Allow-Origin", "*");
                 resp->putHeaderIfNotExists("Access-Control-Max-Age", "1728000");
-
+                std::string username_log = "unknown";
+                auto finishTime = std::chrono::system_clock::now().time_since_epoch() / std::chrono::milliseconds(1);
+                LogString s("/api/v1/privilege",  
+                            "GET", 
+                            std::to_string(startTime), 
+                            std::to_string(finishTime), 
+                            std::to_string(finishTime - startTime), 
+                            username_log, 
+                            401);
+                producer->PostToBroker(s);
                 return _return(resp);
             }
             JWTAuth auth(config);
@@ -478,10 +708,18 @@ public:
                 resp->putHeaderIfNotExists("Access-Control-Allow-Methods", "GET, POST, PUT, OPTIONS, DELETE");
                 resp->putHeaderIfNotExists("Access-Control-Allow-Origin", "*");
                 resp->putHeaderIfNotExists("Access-Control-Max-Age", "1728000");
-
+                std::string username_log = "unknown";
+                auto finishTime = std::chrono::system_clock::now().time_since_epoch() / std::chrono::milliseconds(1);
+                LogString s("/api/v1/privilege",  
+                            "GET", 
+                            std::to_string(startTime), 
+                            std::to_string(finishTime), 
+                            std::to_string(finishTime - startTime), 
+                            username_log, 
+                            401);
+                producer->PostToBroker(s);
                 return _return(resp);
             }
-            LoggerFactory::GetLogger()->LogWarning( "first check" );
 
             auto bonusResponse = bonusService->BalanceGetPoint(auth_token);
             if (bonusResponse->getStatusCode() != 200) {
@@ -489,10 +727,112 @@ public:
                 resp->putHeaderIfNotExists("Access-Control-Allow-Methods", "GET, POST, PUT, OPTIONS, DELETE");
                 resp->putHeaderIfNotExists("Access-Control-Allow-Origin", "*");
                 resp->putHeaderIfNotExists("Access-Control-Max-Age", "1728000");
-
+                std::string username_log = auth.getLogin(token);
+                auto finishTime = std::chrono::system_clock::now().time_since_epoch() / std::chrono::milliseconds(1);
+                LogString s("/api/v1/privilege",  
+                            "GET", 
+                            std::to_string(startTime), 
+                            std::to_string(finishTime), 
+                            std::to_string(finishTime - startTime), 
+                            username_log, 
+                            500);
+                producer->PostToBroker(s);
                 return _return(resp);
             }
-            LoggerFactory::GetLogger()->LogWarning( "bonus ok" );
+            auto bonus = bonusResponse->readBodyToDto<oatpp::Object<BalanceResponseDto>>(
+                    controller->getDefaultObjectMapper());
+
+            auto resp = controller->createDtoResponse(Status::CODE_200, bonus);
+            resp->putHeaderIfNotExists("Access-Control-Allow-Methods", "GET, POST, PUT, OPTIONS, DELETE");
+            resp->putHeaderIfNotExists("Access-Control-Allow-Origin", "*");
+            resp->putHeaderIfNotExists("Access-Control-Max-Age", "1728000");
+            std::string username_log = auth.getLogin(token);
+            auto finishTime = std::chrono::system_clock::now().time_since_epoch() / std::chrono::milliseconds(1);
+            LogString s("/api/v1/privilege",  
+                        "GET", 
+                        std::to_string(startTime), 
+                        std::to_string(finishTime), 
+                        std::to_string(finishTime - startTime), 
+                        username_log, 
+                        200);
+            producer->PostToBroker(s);
+            return _return(resp);
+        }
+
+    };
+
+    ENDPOINT_ASYNC("GET", "/api/v1/me", MeGetPoint) {
+    ENDPOINT_ASYNC_INIT(MeGetPoint)
+
+        Action act() override {
+            auto startTime =  std::chrono::system_clock::now().time_since_epoch() / std::chrono::milliseconds(1);
+            auto auth_token = request->getHeader("Authorization"); 
+            if (!auth_token) {
+                auto dto = ValidationErrorResponse::createShared();
+                dto->message = "Invalid data";
+                oatpp::Vector<String> errors({});
+                errors->push_back("Invalid request header: no auth token provided");
+                dto->errors = errors;
+                auto resp = controller->createDtoResponse(Status::CODE_401, dto);
+                resp->putHeaderIfNotExists("Access-Control-Allow-Methods", "GET, POST, PUT, OPTIONS, DELETE");
+                resp->putHeaderIfNotExists("Access-Control-Allow-Origin", "*");
+                resp->putHeaderIfNotExists("Access-Control-Max-Age", "1728000");
+                std::string username_log = "unknown";
+                auto finishTime = std::chrono::system_clock::now().time_since_epoch() / std::chrono::milliseconds(1);
+                LogString s("/api/v1/me",  
+                            "GET", 
+                            std::to_string(startTime), 
+                            std::to_string(finishTime), 
+                            std::to_string(finishTime - startTime), 
+                            username_log, 
+                            401);
+                producer->PostToBroker(s);
+                return _return(resp);
+            }
+            JWTAuth auth(config);
+            auto token = auth.extractToken(auth_token);
+            if (!auth.checkToken(token))  {
+                auto dto = ValidationErrorResponse::createShared();
+                dto->message = "Invalid data";
+                oatpp::Vector<String> errors({});
+                errors->push_back("Invalid request header: wrong tiken provided");
+                dto->errors = errors;
+                auto resp = controller->createDtoResponse(Status::CODE_401, dto);
+                resp->putHeaderIfNotExists("Access-Control-Allow-Methods", "GET, POST, PUT, OPTIONS, DELETE");
+                resp->putHeaderIfNotExists("Access-Control-Allow-Origin", "*");
+                resp->putHeaderIfNotExists("Access-Control-Max-Age", "1728000");
+                std::string username_log = "unknown";
+                auto finishTime = std::chrono::system_clock::now().time_since_epoch() / std::chrono::milliseconds(1);
+                LogString s("/api/v1/me",  
+                            "GET", 
+                            std::to_string(startTime), 
+                            std::to_string(finishTime), 
+                            std::to_string(finishTime - startTime), 
+                            username_log, 
+                            401);
+                producer->PostToBroker(s);
+                return _return(resp);
+            }
+
+            auto bonusResponse = bonusService->BalanceGetPoint(auth_token);
+            if (bonusResponse->getStatusCode() != 200) {
+                auto resp = controller->createResponse(Status::CODE_500);
+                resp->putHeaderIfNotExists("Access-Control-Allow-Methods", "GET, POST, PUT, OPTIONS, DELETE");
+                resp->putHeaderIfNotExists("Access-Control-Allow-Origin", "*");
+                resp->putHeaderIfNotExists("Access-Control-Max-Age", "1728000");
+                std::string username_log = auth.getLogin(token);
+                auto finishTime = std::chrono::system_clock::now().time_since_epoch() / std::chrono::milliseconds(1);
+                LogString s("/api/v1/me",  
+                            "GET", 
+                            std::to_string(startTime), 
+                            std::to_string(finishTime), 
+                            std::to_string(finishTime - startTime), 
+                            username_log, 
+                            500);
+                producer->PostToBroker(s);
+                return _return(resp);
+            }
+
             auto bonus = bonusResponse->readBodyToDto<oatpp::Object<BalanceResponseDto>>(
                     controller->getDefaultObjectMapper());
 
@@ -502,10 +842,19 @@ public:
                 resp->putHeaderIfNotExists("Access-Control-Allow-Methods", "GET, POST, PUT, OPTIONS, DELETE");
                 resp->putHeaderIfNotExists("Access-Control-Allow-Origin", "*");
                 resp->putHeaderIfNotExists("Access-Control-Max-Age", "1728000");
-
+                std::string username_log = auth.getLogin(token);
+                auto finishTime = std::chrono::system_clock::now().time_since_epoch() / std::chrono::milliseconds(1);
+                LogString s("/api/v1/me",  
+                            "GET", 
+                            std::to_string(startTime), 
+                            std::to_string(finishTime), 
+                            std::to_string(finishTime - startTime), 
+                            username_log, 
+                            500);
+                producer->PostToBroker(s);
                 return _return(resp);
             }
-            LoggerFactory::GetLogger()->LogWarning( "ticket ok" );
+
             auto tickets = ticketsResponse->readBodyToDto<oatpp::Vector<oatpp::Object<TicketResponseDto>>>(
                     controller->getDefaultObjectMapper());
             oatpp::Vector<oatpp::Object<FullTicketResponseDto>> dtoVector({});
@@ -516,7 +865,16 @@ public:
                     resp->putHeaderIfNotExists("Access-Control-Allow-Methods", "GET, POST, PUT, OPTIONS, DELETE");
                     resp->putHeaderIfNotExists("Access-Control-Allow-Origin", "*");
                     resp->putHeaderIfNotExists("Access-Control-Max-Age", "1728000");
-
+                    std::string username_log = auth.getLogin(token);
+                    auto finishTime = std::chrono::system_clock::now().time_since_epoch() / std::chrono::milliseconds(1);
+                    LogString s("/api/v1/me",  
+                                "GET", 
+                                std::to_string(startTime), 
+                                std::to_string(finishTime), 
+                                std::to_string(finishTime - startTime), 
+                                username_log, 
+                                500);
+                    producer->PostToBroker(s);
                     return _return(resp);
                 }
                 auto flight = flightResponse->readBodyToDto<oatpp::Object<FlightResponseDto>>(
@@ -544,6 +902,16 @@ public:
             resp->putHeaderIfNotExists("Access-Control-Allow-Origin", "*");
             resp->putHeaderIfNotExists("Access-Control-Max-Age", "1728000");
 
+            std::string username_log = auth.getLogin(token);
+            auto finishTime = std::chrono::system_clock::now().time_since_epoch() / std::chrono::milliseconds(1);
+            LogString s("/api/v1/me",  
+                        "GET", 
+                        std::to_string(startTime), 
+                        std::to_string(finishTime), 
+                        std::to_string(finishTime - startTime), 
+                        username_log, 
+                        200);
+            producer->PostToBroker(s);
             return _return(resp);
         }
 
@@ -556,23 +924,8 @@ public:
             return request->readBodyToStringAsync().callbackTo(&BuyPoint::buyTicketResponse);
         }
         Action buyTicketResponse( const oatpp::String& str) {
-            oatpp::Object<FullBuyRequestDto> body;
-            try {
-                body = controller->getDefaultObjectMapper()->readFromString<oatpp::Object<FullBuyRequestDto>>(str);
-            } catch (const oatpp::parser::ParsingError& error){
-                auto dto = ValidationErrorResponse::createShared();
-                dto->message = "Invalid data";
-                oatpp::Vector<String> errors({});
-                errors->push_back("Invalid request body: " + error.getMessage());
-                dto->errors = errors;
-                auto resp = controller->createDtoResponse(Status::CODE_400, dto);
-                resp->putHeaderIfNotExists("Access-Control-Allow-Methods", "GET, POST, PUT, OPTIONS, DELETE");
-                resp->putHeaderIfNotExists("Access-Control-Allow-Origin", "*");
-                resp->putHeaderIfNotExists("Access-Control-Max-Age", "1728000");
-
-                return _return(resp);
-            }
-           auto auth_token = request->getHeader("Authorization"); 
+            auto startTime =  std::chrono::system_clock::now().time_since_epoch() / std::chrono::milliseconds(1);
+            auto auth_token = request->getHeader("Authorization"); 
             if (!auth_token) {
                 auto dto = ValidationErrorResponse::createShared();
                 dto->message = "Invalid data";
@@ -583,7 +936,16 @@ public:
                 resp->putHeaderIfNotExists("Access-Control-Allow-Methods", "GET, POST, PUT, OPTIONS, DELETE");
                 resp->putHeaderIfNotExists("Access-Control-Allow-Origin", "*");
                 resp->putHeaderIfNotExists("Access-Control-Max-Age", "1728000");
-
+                std::string username_log = "unknown";
+                auto finishTime = std::chrono::system_clock::now().time_since_epoch() / std::chrono::milliseconds(1);
+                LogString s("/api/v1/tickets",  
+                            "POST", 
+                            std::to_string(startTime), 
+                            std::to_string(finishTime), 
+                            std::to_string(finishTime - startTime), 
+                            username_log, 
+                            401);
+                producer->PostToBroker(s);
                 return _return(resp);
             }
             JWTAuth auth(config);
@@ -598,12 +960,46 @@ public:
                 resp->putHeaderIfNotExists("Access-Control-Allow-Methods", "GET, POST, PUT, OPTIONS, DELETE");
                 resp->putHeaderIfNotExists("Access-Control-Allow-Origin", "*");
                 resp->putHeaderIfNotExists("Access-Control-Max-Age", "1728000");
-
+                std::string username_log = "unknown";
+                auto finishTime = std::chrono::system_clock::now().time_since_epoch() / std::chrono::milliseconds(1);
+                LogString s("/api/v1/tickets",  
+                            "POST", 
+                            std::to_string(startTime), 
+                            std::to_string(finishTime), 
+                            std::to_string(finishTime - startTime), 
+                            username_log, 
+                            401);
+                producer->PostToBroker(s);
                 return _return(resp);
             }
 
             auto un = auth.getLogin(token);
 
+            oatpp::Object<FullBuyRequestDto> body;
+            try {
+                body = controller->getDefaultObjectMapper()->readFromString<oatpp::Object<FullBuyRequestDto>>(str);
+            } catch (const oatpp::parser::ParsingError& error){
+                auto dto = ValidationErrorResponse::createShared();
+                dto->message = "Invalid data";
+                oatpp::Vector<String> errors({});
+                errors->push_back("Invalid request body: " + error.getMessage());
+                dto->errors = errors;
+                auto resp = controller->createDtoResponse(Status::CODE_400, dto);
+                resp->putHeaderIfNotExists("Access-Control-Allow-Methods", "GET, POST, PUT, OPTIONS, DELETE");
+                resp->putHeaderIfNotExists("Access-Control-Allow-Origin", "*");
+                resp->putHeaderIfNotExists("Access-Control-Max-Age", "1728000");
+
+                auto finishTime = std::chrono::system_clock::now().time_since_epoch() / std::chrono::milliseconds(1);
+                LogString s("/api/v1/tickets",  
+                            "POST", 
+                            std::to_string(startTime), 
+                            std::to_string(finishTime), 
+                            std::to_string(finishTime - startTime), 
+                            un, 
+                            400);
+                producer->PostToBroker(s);
+                return _return(resp);
+            }
             auto fbrDto = FullBuyResponseDto::createShared();
 
             auto flightResponse = flightService->FlightGetPoint(body->flightNumber);
@@ -613,7 +1009,15 @@ public:
                 resp->putHeaderIfNotExists("Access-Control-Allow-Methods", "GET, POST, PUT, OPTIONS, DELETE");
                 resp->putHeaderIfNotExists("Access-Control-Allow-Origin", "*");
                 resp->putHeaderIfNotExists("Access-Control-Max-Age", "1728000");
-
+                auto finishTime = std::chrono::system_clock::now().time_since_epoch() / std::chrono::milliseconds(1);
+                LogString s("/api/v1/tickets",  
+                            "POST", 
+                            std::to_string(startTime), 
+                            std::to_string(finishTime), 
+                            std::to_string(finishTime - startTime), 
+                            un, 
+                            500);
+                producer->PostToBroker(s);
                 return _return(resp);
             }
             auto flight = flightResponse->readBodyToDto<oatpp::Object<FlightResponseDto>>(controller->getDefaultObjectMapper());
@@ -628,7 +1032,15 @@ public:
                 resp->putHeaderIfNotExists("Access-Control-Allow-Methods", "GET, POST, PUT, OPTIONS, DELETE");
                 resp->putHeaderIfNotExists("Access-Control-Allow-Origin", "*");
                 resp->putHeaderIfNotExists("Access-Control-Max-Age", "1728000");
-
+                auto finishTime = std::chrono::system_clock::now().time_since_epoch() / std::chrono::milliseconds(1);
+                LogString s("/api/v1/tickets",  
+                            "POST", 
+                            std::to_string(startTime), 
+                            std::to_string(finishTime), 
+                            std::to_string(finishTime - startTime), 
+                            un, 
+                            500);
+                producer->PostToBroker(s);
                 return _return(resp);
             }
             auto ticket = ticketResp->readBodyToDto<oatpp::Object<TicketResponseDto>>(
@@ -646,7 +1058,15 @@ public:
                 resp->putHeaderIfNotExists("Access-Control-Allow-Methods", "GET, POST, PUT, OPTIONS, DELETE");
                 resp->putHeaderIfNotExists("Access-Control-Allow-Origin", "*");
                 resp->putHeaderIfNotExists("Access-Control-Max-Age", "1728000");
-
+                auto finishTime = std::chrono::system_clock::now().time_since_epoch() / std::chrono::milliseconds(1);
+                LogString s("/api/v1/tickets",  
+                            "POST", 
+                            std::to_string(startTime), 
+                            std::to_string(finishTime), 
+                            std::to_string(finishTime - startTime), 
+                            un, 
+                            500);
+                producer->PostToBroker(s);
                 return _return(resp);
             }
             auto bonus = bonusResp->readBodyToDto<oatpp::Object<BuyResponseDto>>(
@@ -670,7 +1090,15 @@ public:
             resp->putHeaderIfNotExists("Access-Control-Allow-Methods", "GET, POST, PUT, OPTIONS, DELETE");
             resp->putHeaderIfNotExists("Access-Control-Allow-Origin", "*");
             resp->putHeaderIfNotExists("Access-Control-Max-Age", "1728000");
-
+            auto finishTime = std::chrono::system_clock::now().time_since_epoch() / std::chrono::milliseconds(1);
+            LogString s("/api/v1/tickets",  
+                        "POST", 
+                        std::to_string(startTime), 
+                        std::to_string(finishTime), 
+                        std::to_string(finishTime - startTime), 
+                        un, 
+                        200);
+            producer->PostToBroker(s);
             return _return(resp);
         }
 
@@ -680,6 +1108,8 @@ public:
     ENDPOINT_ASYNC_INIT(ReturnPoint)
 
         Action act() override {
+            std::string ticket_uid = request->getPathVariable("ticketUid") ? request->getPathVariable("ticketUid") : "";
+            auto startTime =  std::chrono::system_clock::now().time_since_epoch() / std::chrono::milliseconds(1);
            auto auth_token = request->getHeader("Authorization"); 
             if (!auth_token) {
                 auto dto = ValidationErrorResponse::createShared();
@@ -691,7 +1121,16 @@ public:
                 resp->putHeaderIfNotExists("Access-Control-Allow-Methods", "GET, POST, PUT, OPTIONS, DELETE");
                 resp->putHeaderIfNotExists("Access-Control-Allow-Origin", "*");
                 resp->putHeaderIfNotExists("Access-Control-Max-Age", "1728000");
-
+                std::string username_log = "unknown";
+                auto finishTime = std::chrono::system_clock::now().time_since_epoch() / std::chrono::milliseconds(1);
+                LogString s("/api/v1/tickets/" + ticket_uid,  
+                            "DELETE", 
+                            std::to_string(startTime), 
+                            std::to_string(finishTime), 
+                            std::to_string(finishTime - startTime), 
+                            username_log, 
+                            401);
+                producer->PostToBroker(s);
                 return _return(resp);
             }
             JWTAuth auth(config);
@@ -706,14 +1145,21 @@ public:
                 resp->putHeaderIfNotExists("Access-Control-Allow-Methods", "GET, POST, PUT, OPTIONS, DELETE");
                 resp->putHeaderIfNotExists("Access-Control-Allow-Origin", "*");
                 resp->putHeaderIfNotExists("Access-Control-Max-Age", "1728000");
-
+                std::string username_log = "unknown";
+                auto finishTime = std::chrono::system_clock::now().time_since_epoch() / std::chrono::milliseconds(1);
+                LogString s("/api/v1/tickets/" + ticket_uid,  
+                            "DELETE", 
+                            std::to_string(startTime), 
+                            std::to_string(finishTime), 
+                            std::to_string(finishTime - startTime), 
+                            username_log, 
+                            401);
+                producer->PostToBroker(s);
                 return _return(resp);
             }
 
             auto username = auth.getLogin(token);
-
-
-            std::string ticket_uid = request->getPathVariable("ticketUid") ? request->getPathVariable("ticketUid") : "";
+            
             if (username.empty() || ticket_uid.empty()){
                 auto dto = ErrorResponse::createShared();
                 dto->message = "Invalid username or ticketUID";
@@ -723,6 +1169,15 @@ public:
                 resp->putHeaderIfNotExists("Access-Control-Allow-Origin", "*");
                 resp->putHeaderIfNotExists("Access-Control-Max-Age", "1728000");
 
+                auto finishTime = std::chrono::system_clock::now().time_since_epoch() / std::chrono::milliseconds(1);
+                LogString s("/api/v1/tickets/" + ticket_uid,  
+                            "DELETE", 
+                            std::to_string(startTime), 
+                            std::to_string(finishTime), 
+                            std::to_string(finishTime - startTime), 
+                            username, 
+                            400);
+                producer->PostToBroker(s);
                 return _return(resp);
             }
 
@@ -734,7 +1189,15 @@ public:
                 resp->putHeaderIfNotExists("Access-Control-Allow-Methods", "GET, POST, PUT, OPTIONS, DELETE");
                 resp->putHeaderIfNotExists("Access-Control-Allow-Origin", "*");
                 resp->putHeaderIfNotExists("Access-Control-Max-Age", "1728000");
-
+                auto finishTime = std::chrono::system_clock::now().time_since_epoch() / std::chrono::milliseconds(1);
+                LogString s("/api/v1/tickets/" + ticket_uid,  
+                            "DELETE", 
+                            std::to_string(startTime), 
+                            std::to_string(finishTime), 
+                            std::to_string(finishTime - startTime), 
+                            username, 
+                            404);
+                producer->PostToBroker(s);
                 return _return(resp);
             }
 
@@ -746,14 +1209,30 @@ public:
                 resp->putHeaderIfNotExists("Access-Control-Allow-Methods", "GET, POST, PUT, OPTIONS, DELETE");
                 resp->putHeaderIfNotExists("Access-Control-Allow-Origin", "*");
                 resp->putHeaderIfNotExists("Access-Control-Max-Age", "1728000");
-
+                auto finishTime = std::chrono::system_clock::now().time_since_epoch() / std::chrono::milliseconds(1);
+                LogString s("/api/v1/tickets/" + ticket_uid,  
+                            "DELETE", 
+                            std::to_string(startTime), 
+                            std::to_string(finishTime), 
+                            std::to_string(finishTime - startTime), 
+                            username, 
+                            404);
+                producer->PostToBroker(s);
                 return _return(resp);
             }
             auto resp = controller->createResponse(Status::CODE_204);
             resp->putHeaderIfNotExists("Access-Control-Allow-Methods", "GET, POST, PUT, OPTIONS, DELETE");
             resp->putHeaderIfNotExists("Access-Control-Allow-Origin", "*");
             resp->putHeaderIfNotExists("Access-Control-Max-Age", "1728000");
-
+            auto finishTime = std::chrono::system_clock::now().time_since_epoch() / std::chrono::milliseconds(1);
+            LogString s("/api/v1/tickets/" + ticket_uid,  
+                        "DELETE", 
+                        std::to_string(startTime), 
+                        std::to_string(finishTime), 
+                        std::to_string(finishTime - startTime), 
+                        username, 
+                        204);
+            producer->PostToBroker(s);
             return _return(resp);
         }
 

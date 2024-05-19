@@ -76,3 +76,16 @@ create table if not exists AuthCode (
     login varchar(50),
     scope_string varchar(200)
 );
+
+\c statistics
+CREATE TABLE statistic
+(
+    id              SERIAL PRIMARY KEY,
+    username   VARCHAR(250),
+    path       VARCHAR(250),
+    method     VARCHAR(250),
+    startedat numeric,
+    finishedat   numeric,
+    duration   numeric,
+    responsecode           INT
+);
