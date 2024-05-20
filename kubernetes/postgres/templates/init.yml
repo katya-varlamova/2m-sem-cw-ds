@@ -13,7 +13,13 @@ data:
 
     CREATE DATABASE privileges;
     GRANT ALL PRIVILEGES ON DATABASE privileges TO {{ .Values.pg.default.username }};
-    
+
+    CREATE DATABASE persons;
+    GRANT ALL PRIVILEGES ON DATABASE persons TO {{ .Values.pg.default.username }};
+
+    CREATE DATABASE statistics;
+    GRANT ALL PRIVILEGES ON DATABASE statistics TO {{ .Values.pg.default.username }};
+
     \c tickets
 
     CREATE TABLE ticket
@@ -69,9 +75,46 @@ data:
             CHECK (operation_type IN ('FILL_IN_BALANCE', 'DEBIT_THE_ACCOUNT'))
     );
 
+    \c persons
+
+    create table if not exists Person (
+        login varchar(80) primary key,
+        name varchar(50),
+        email varchar(50),
+        mobilePhone varchar(50),
+        lastName varchar(50),
+        password varchar(50),
+        role varchar(50)
+        );
+
+    create table if not exists Client (
+        client_id serial primary key,
+        client_secret varchar(50)
+    );
+
+    create table if not exists AuthCode (
+        code serial primary key,
+        client_id   INT REFERENCES Client (client_id),
+        login varchar(50),
+        scope_string varchar(200)
+    );
+
+    \c statistics
+    CREATE TABLE statistic
+    (
+        id              SERIAL PRIMARY KEY,
+        username   VARCHAR(250),
+        path       VARCHAR(250),
+        method     VARCHAR(250),
+        startedat numeric,
+        finishedat   numeric,
+        duration   numeric,
+        responsecode           INT
+    );
+
     \c tickets
     INSERT INTO ticket (ticket_uid ,username, flight_number, price, status) VALUES
-    ('049161bb-badd-4fa8-9d90-87c9a82b0668', 'Test Max', 'AFL031', 1500, 'PAID');
+    ('049161bb-badd-4fa8-9d90-87c9a82b0668', 'Kate', 'AFL031', 1500, 'PAID');
 
     \c flights
     INSERT INTO airport (name, city, country) VALUES
@@ -84,10 +127,20 @@ data:
 
     \c privileges
     INSERT INTO privilege (username, status, balance) VALUES
-    ('Test Max', 'GOLD', 1500);
+    ('Kate', 'GOLD', 1500);
     INSERT INTO privilege_history (privilege_id, ticket_uid, datetime, balance_diff, operation_type) VALUES
     (1,
-     '049161bb-badd-4fa8-9d90-87c9a82b0668',
-     '2021-10-08T19:59:19Z',
-     1500,
-     'FILL_IN_BALANCE');
+    '049161bb-badd-4fa8-9d90-87c9a82b0668',
+    '2021-10-08T19:59:19Z',
+    1500,
+    'FILL_IN_BALANCE');
+
+    \c persons
+    INSERT INTO Person (login, name, email, mobilePhone, lastName, password, role) VALUES
+    ('Kate', 'katya', 'katy@mail.ru', '+7 (990) 100-73-02', 'varlamova', 'pass', 'user'),
+    ('admin', 'katya', 'katy_admin@mail.ru', '+7 (990) 100-73-02', 'varlamova', 'admin', 'admin');
+
+    INSERT INTO Client (client_secret) VALUES 
+    ('secret');
+
+

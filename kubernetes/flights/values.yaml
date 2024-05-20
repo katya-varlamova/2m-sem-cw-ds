@@ -21,3 +21,32 @@ flight:
   service:
     image: katyavarlamova/flight-service:latest
     port: 8060
+
+statistics:
+  service:
+    image: katyavarlamova/statistics-service:latest
+    port: 8020
+
+identity-provider:
+  service:
+    image: katyavarlamova/identity-provider-service:latest
+    port: 8090
+
+kafka-broker:
+  service:
+    image: katyavarlamova/kafka-broker:latest
+
+frontend:
+    service:
+    image: katyavarlamova/frontend:latest
+    port: 3000
+
+zookeeper:
+  service:
+    image: katyavarlamova/zookeeper:latest
+    port: 31000
+
+kafka:
+    service:
+    image: katyavarlamova/kafka:latest
+    port: 31000
