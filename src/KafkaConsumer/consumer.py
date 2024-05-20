@@ -12,7 +12,10 @@ consumer = Consumer({
     'bootstrap.servers': kafka_broker,
     'group.id': group_id
 })
-
+try:
+    consumer.create_topic(topic_name)
+except:
+    pass
 
 consumer.subscribe([topic_name])
 
