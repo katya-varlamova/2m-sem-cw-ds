@@ -27,6 +27,5 @@ struct LogString {
 class IProducer {
 public:
     virtual void PostToBroker(const LogString& logData) = 0;
-    virtual void Prepare() = 0;
     virtual ~IProducer() = default;
 };
