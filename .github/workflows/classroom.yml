@@ -23,16 +23,10 @@ jobs:
         run: |
           echo $DOCKER_USER
           docker login -u $DOCKER_USER -p $DOCKER_PASSWORD
-          docker-compose build frontend
-          docker-compose build kafka
-          docker-compose build kafka-broker
-          docker-compose build zookeeper
-          
-          docker tag kafka-broker katyavarlamova/kafka-broker
-          docker push katyavarlamova/kafka-broker
-          
-          docker tag frontend katyavarlamova/frontend
-          docker push katyavarlamova/frontend
+          docker-compose up -d kafka
+          docker-compose up -d zookeeper
+
+          docker images
 
           docker tag confluentinc/cp-zookeeper:7.3.2 katyavarlamova/zookeeper
           docker push katyavarlamova/zookeeper
