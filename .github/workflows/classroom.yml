@@ -69,24 +69,31 @@ jobs:
         run: |
           echo $DOCKER_USER
           docker login -u $DOCKER_USER -p $DOCKER_PASSWORD
-          docker compose build
-          docker tag api-gateway katyavarlamova/api-gateway
-          docker push katyavarlamova/api-gateway
-          docker tag bonus-service katyavarlamova/bonus-service
-          docker push katyavarlamova/bonus-service
-          docker tag flight-service katyavarlamova/flight-service
-          docker push katyavarlamova/flight-service
-          docker tag ticket-service katyavarlamova/ticket-service
-          docker push katyavarlamova/ticket-service
+          docker-compose build frontend
+          docker-compose build kafka
+          docker-compose build kafka-broker
+          docker-compose build zookeeper
+        # docker compose build
+        # docker tag api-gateway katyavarlamova/api-gateway
+        # docker push katyavarlamova/api-gateway
+        # docker tag bonus-service katyavarlamova/bonus-service
+        # docker push katyavarlamova/bonus-service
+        # docker tag flight-service katyavarlamova/flight-service
+        # docker push katyavarlamova/flight-service
+        # docker tag ticket-service katyavarlamova/ticket-service
+        # docker push katyavarlamova/ticket-service
 
-          docker tag identity-provider-service katyavarlamova/identity-provider-service
-          docker push katyavarlamova/identity-provider-service
-          
-          docker tag statistics-service katyavarlamova/statistics-service
-          docker push katyavarlamova/statistics-service
+        # docker tag identity-provider-service katyavarlamova/identity-provider-service
+        # docker push katyavarlamova/identity-provider-service
+        
+        # docker tag statistics-service katyavarlamova/statistics-service
+        # docker push katyavarlamova/statistics-service
 
           docker tag kafka-broker katyavarlamova/kafka-broker
           docker push katyavarlamova/kafka-broker
+          
+          docker tag frontend katyavarlamova/frontend
+          docker push katyavarlamova/frontend
 
           docker tag confluentinc/cp-zookeeper:7.3.2 katyavarlamova/zookeeper
           docker push katyavarlamova/zookeeper
