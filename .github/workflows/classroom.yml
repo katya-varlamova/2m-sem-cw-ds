@@ -48,8 +48,7 @@ jobs:
       - name: Run containers
         timeout-minutes: 10
         run: |
-          docker-compose up -d zookeeper
-          docker-compose up -d kafka
+          docker-compose up -d identity-provider-service
           docker-compose up -d api-gateway
 
           docker-compose logs ticket-service
