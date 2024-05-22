@@ -16,6 +16,50 @@ jobs:
           fetch-depth: 0
 
       - uses: docker/setup-buildx-action@v2
+      - name: Build images
+        timeout-minutes: 10
+        run: |
+          docker-compose build frontend
+          docker-compose build postgres
+          docker-compose build api-gateway
+          docker-compose build flight-service
+          docker-compose build bonus-service
+          docker-compose build statistics-service
+          docker-compose build identity-provider-service
+          docker-compose build kafka-broker
+          docker-compose build ticket-service
+          docker-compose build ticket-service
+      - name: Setup kafka
+        run: |
+          docker-compose up -d zookeeper
+          docker-compose logs zookeeper
+          docker-compose up -d kafka
+          docker-compose logs kafka
+      - name: Setup db
+        run: |
+          docker-compose up -d postgres
+          docker-compose logs postgres
+          sleep 5
+          cd postgres
+          chmod +x ./create-test-db.sh  && ./create-test-db.sh
+          cd ..
+
+      - name: Run containers
+        timeout-minutes: 10
+        run: |
+          docker-compose up -d identity-provider-service
+          docker-compose up -d api-gateway
+
+          docker-compose logs ticket-service
+          docker-compose logs flight-service
+          docker-compose logs bonus-service
+          docker-compose logs api-gateway
+          docker-compose logs identity-provider-service
+          docker-compose logs kafka-broker
+          docker-compose logs statistics-service
+          chmod +x ./scripts/wait-script.sh  && ./scripts/wait-script.sh
+        env:
+          WAIT_PORTS: 8080,8070,8060,8050,8090,8020
       - name: publish
         env:
           DOCKER_USER: ${{secrets.DOCKERHUB_USERNAME}}
@@ -23,16 +67,26 @@ jobs:
         run: |
           echo $DOCKER_USER
           docker login -u $DOCKER_USER -p $DOCKER_PASSWORD
-          docker-compose up -d kafka
-          docker-compose up -d zookeeper
+          docker-compose build frontend
+          docker-compose build kafka
+          docker-compose build kafka-broker
+          docker-compose build zookeeper
+          
+          docker compose build
+          docker tag api-gateway katyavarlamova/api-gateway
+          docker push katyavarlamova/api-gateway
+          docker tag bonus-service katyavarlamova/bonus-service
+          docker push katyavarlamova/bonus-service
+          docker tag flight-service katyavarlamova/flight-service
+          docker push katyavarlamova/flight-service
+          docker tag ticket-service katyavarlamova/ticket-service
+          docker push katyavarlamova/ticket-service
 
-          docker images
-
-          docker tag confluentinc/cp-zookeeper:7.3.2 katyavarlamova/zookeeper
-          docker push katyavarlamova/zookeeper
-
-          docker tag confluentinc/cp-kafka:7.3.2 katyavarlamova/kafka
-          docker push katyavarlamova/kafka
+          docker tag identity-provider-service katyavarlamova/identity-provider-service
+          docker push katyavarlamova/identity-provider-service
+          
+          docker tag statistics-service katyavarlamova/statistics-service
+          docker push katyavarlamova/statistics-service
 
       - name: Write out the kubeconfig info
         env:
@@ -60,7 +114,8 @@ jobs:
           kubectl apply -f ./kubernetes/ingress.yaml
       - name: Add hosts to /etc/hosts
         run: |
-          sudo echo "185.130.113.206 katyavarlamova.ds.com" | sudo tee -a /etc/hosts
+          sudo echo "91.219.226.34 katyavarlamova.ds.com" | sudo tee -a /etc/hosts
+          sudo echo "91.219.226.34 katyavarlamova.idp.ds.com" | sudo tee -a /etc/hosts
                 
 
       - name: Stop containers

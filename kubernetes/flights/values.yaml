@@ -27,12 +27,12 @@ statistics:
     image: katyavarlamova/statistics-service:latest
     port: 8020
 
-identity-provider:
+provider:
   service:
     image: katyavarlamova/identity-provider-service:latest
     port: 8090
 
-kafka-broker:
+broker:
   service:
     image: katyavarlamova/kafka-broker:latest
 
