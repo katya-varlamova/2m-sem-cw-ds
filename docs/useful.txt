@@ -17,3 +17,8 @@ kubectl logs kafka-chart-kafka-848fdccb7b-g272b
 npm install
 npm run build
 npm start
+
+
+sudo lsof -i :5432
+sudo pkill -u postgres
+docker system prune -f
