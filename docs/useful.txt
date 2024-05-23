@@ -1,0 +1,19 @@
+docker tag ds-project katyavarlamova/ds-project
+docker-compose rm back
+docker-compose up back
+docker-compose run back sh
+docker build . --tag ds-project
+docker builder prune
+
+psql  -h 127.0.0.1 "sslmode=disable user=postgres port=5434 password=postgres"
+
+kubectl get pods -A
+kubectl apply -f ./kubernetes/ingress.yaml
+kubectl describe -n katyavarlamova ingress gateway-ingress
+helm upgrade --install flights ./kubernetes/flights
+helm uninstall flights
+kubectl logs kafka-chart-kafka-848fdccb7b-g272b
+
+npm install
+npm run build
+npm start
